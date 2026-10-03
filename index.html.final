@@ -1,0 +1,2725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delyvo Grocery</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div>
+      <h1>DELYVO</h1>
+      <p>Fresh groceries, delivered.</p>
+    </div>
+
+    <div class="header-actions">
+      <button id="myOrdersBtn" class="secondary-btn">My Orders</button>
+  <button id="loginBtn" class="secondary-btn">Login</button>
+      <button id="cartBtn">
+        🛒 <span id="cartCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  
+<div id="authModal" class="modal">
+  <div class="modal-card">
+    <div class="drawer-head">
+      <h2 id="authTitle">Delyvo Login</h2>
+      <button class="close-btn" onclick="closePanel('authModal')">×</button>
+    </div>
+
+    <form id="authForm">
+      <input id="authEmail" type="email" placeholder="Email" required>
+      <input id="authPassword" type="password" placeholder="Password" required>
+      <button class="primary-btn" type="submit">Login</button>
+    </form>
+
+    <p id="authMessage"></p>
+
+    <button id="signupBtn" class="secondary-btn" type="button">
+      New customer? Create account
+    </button>
+  </div>
+</div>
+
+<main>
+    <section id="locationBtn" class="location">
+      <span>📍</span>
+      <div>
+        <small>Deliver to</small>
+        <strong id="locationText">Select your location</strong>
+      </div>
+    </section>
+
+    <section class="search">
+      <input
+        id="searchInput"
+        type="search"
+        placeholder="Search groceries..."
+      >
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Categories</h2>
+      </div>
+
+      <div id="categories" class="categories">
+        <p>Loading categories...</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Popular products</h2>
+      </div>
+
+      <div id="products" class="products">
+        <p>Loading products...</p>
+      </div>
+    </section>
+  </main>
+
+  
+<div id="cartPanel" class="drawer">
+  <div class="drawer-head">
+    <h2>Your Cart</h2>
+    <button class="close-btn" onclick="closePanel('cartPanel')">×</button>
+  </div>
+  <div id="cartItems" class="cart-items"></div>
+  <div class="cart-footer">
+    <div><span>Subtotal</span><b id="cartSubtotal">₹0</b></div>
+    <div><span>Delivery</span><b>FREE</b></div>
+    <div class="cart-total"><span>Total</span><b id="cartTotal">₹0</b></div>
+    <button class="primary-btn" onclick="openCheckout()">Proceed to Checkout</button>
+  </div>
+</div>
+
+<div id="locationModal" class="modal">
+  <div class="modal-card">
+    <div class="drawer-head">
+      <h2>Delivery Address</h2>
+      <button class="close-btn" onclick="closePanel('locationModal')">×</button>
+    </div>
+
+    <form id="addressForm">
+      <input name="label" placeholder="Home / Work" required>
+      <input name="recipient_name" placeholder="Your name" required>
+      <input name="phone" placeholder="Phone number" required>
+      <textarea name="address_line1" placeholder="House / street / area" required></textarea>
+      <input name="city" placeholder="City" required>
+      <input name="pincode" placeholder="Pincode" required>
+      <button class="primary-btn" type="submit">Save Address</button>
+    </form>
+  </div>
+</div>
+
+<div id="checkoutModal" class="modal">
+  <div class="modal-card">
+    <div class="drawer-head">
+      <h2>Checkout</h2>
+      <button class="close-btn" onclick="closePanel('checkoutModal')">×</button>
+    </div>
+
+    <div id="checkoutSummary" class="checkout-summary"></div>
+
+    <div class="payment-box">
+      <b>Payment Method</b>
+      <p>Cash on Delivery</p>
+    </div>
+
+    <button class="primary-btn" onclick="placeOrder()">Place Order</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+
+<script>
+(() => {
+  function showDelyvoOrderSuccess(order) {
+    let old = document.getElementById("delyvoOrderSuccess");
+    if (old) old.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "delyvoOrderSuccess";
+
+    modal.innerHTML = `
+      <div class="dos-backdrop"></div>
+
+      <div class="dos-card">
+        <div class="dos-check">✓</div>
+
+        <h2>Order Placed Successfully</h2>
+
+        <p class="dos-thanks">
+          Thank you for shopping with Delyvo.
+        </p>
+
+        <div class="dos-order">
+          <span>Order Number</span>
+          <strong>${escapeHtml(order.order_number || "")}</strong>
+        </div>
+
+        <div class="dos-row">
+          <span>Subtotal</span>
+          <strong>₹${Number(order.subtotal || 0).toFixed(0)}</strong>
+        </div>
+
+        <div class="dos-row">
+          <span>Delivery Fee</span>
+          <strong>₹${Number(order.delivery_fee || 0).toFixed(0)}</strong>
+        </div>
+
+        <div class="dos-total">
+          <span>Total</span>
+          <strong>₹${Number(order.total || 0).toFixed(0)}</strong>
+        </div>
+
+        <div class="dos-cod">
+          💵 Cash on Delivery
+        </div>
+
+        <button class="dos-primary" id="dosContinue">
+          Continue Shopping
+        </button>
+
+        <button class="dos-secondary" id="dosOrders">
+          My Orders
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("dosContinue").onclick = () => {
+      modal.remove();
+      window.scrollTo({top: 0, behavior: "smooth"});
+    };
+
+    document.getElementById("dosOrders").onclick = () => {
+      modal.remove();
+
+      if (typeof window.openMyOrders === "function") {
+        window.openMyOrders();
+      } else {
+        alert("My Orders section next update mein available hoga.");
+      }
+    };
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  window.showDelyvoOrderSuccess = showDelyvoOrderSuccess;
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #delyvoOrderSuccess {
+      position:fixed;
+      inset:0;
+      z-index:99999;
+    }
+
+    .dos-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.55);
+    }
+
+    .dos-card {
+      position:relative;
+      z-index:2;
+      width:min(92%,430px);
+      box-sizing:border-box;
+      margin:8vh auto 0;
+      padding:28px;
+      background:#fff;
+      border-radius:22px;
+      box-shadow:0 15px 50px rgba(0,0,0,.25);
+      text-align:center;
+    }
+
+    .dos-check {
+      width:68px;
+      height:68px;
+      margin:0 auto 15px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#dff7e4;
+      color:#11852e;
+      font-size:38px;
+      font-weight:800;
+    }
+
+    .dos-card h2 {
+      margin:0;
+      font-size:24px;
+    }
+
+    .dos-thanks {
+      color:#777;
+      margin:8px 0 22px;
+    }
+
+    .dos-order {
+      padding:14px;
+      border-radius:12px;
+      background:#f7f7f7;
+      margin-bottom:15px;
+    }
+
+    .dos-order span {
+      display:block;
+      color:#777;
+      font-size:13px;
+      margin-bottom:5px;
+    }
+
+    .dos-order strong {
+      font-size:19px;
+    }
+
+    .dos-row,
+    .dos-total {
+      display:flex;
+      justify-content:space-between;
+      gap:15px;
+      padding:8px 0;
+    }
+
+    .dos-row {
+      color:#666;
+    }
+
+    .dos-total {
+      margin-top:8px;
+      padding-top:14px;
+      border-top:1px solid #eee;
+      font-size:18px;
+    }
+
+    .dos-cod {
+      margin:18px 0;
+      padding:12px;
+      border-radius:10px;
+      background:#fff7df;
+      color:#7b5a00;
+      font-weight:700;
+    }
+
+    .dos-primary,
+    .dos-secondary {
+      width:100%;
+      padding:12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:15px;
+    }
+
+    .dos-primary {
+      border:0;
+      background:#111;
+      color:#fff;
+    }
+
+    .dos-secondary {
+      margin-top:9px;
+      border:1px solid #ddd;
+      background:#fff;
+      color:#222;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  const SUPABASE_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function customerToken() {
+    return localStorage.getItem("delyvo_access_token") || "";
+  }
+
+  async function customerApi(path) {
+    const token = customerToken();
+
+    if (!token) {
+      throw new Error("Please login first.");
+    }
+
+    const response = await fetch(
+      SUPABASE_URL + path,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + token
+        }
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        "Unable to load orders"
+      );
+    }
+
+    return data;
+  }
+
+  function orderStatusLabel(status) {
+    const labels = {
+      placed: "ORDER RECEIVED",
+      pending: "ORDER RECEIVED",
+      confirmed: "CONFIRMED",
+      packing: "PACKING",
+      packed: "READY",
+      out_for_delivery: "OUT FOR DELIVERY",
+      delivered: "DELIVERED",
+      cancelled: "CANCELLED",
+      refunded: "REFUNDED"
+    };
+
+    return labels[status] ||
+      String(status || "").replaceAll("_", " ").toUpperCase();
+  }
+
+  function openMyOrders() {
+    let old = document.getElementById("delyvoMyOrders");
+    if (old) old.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "delyvoMyOrders";
+
+    modal.innerHTML = `
+      <div class="mo-backdrop"></div>
+
+      <div class="mo-card">
+        <div class="mo-head">
+          <div>
+            <h2>My Orders</h2>
+            <p>Your Delyvo grocery orders</p>
+          </div>
+
+          <button class="mo-close" id="moClose">×</button>
+        </div>
+
+        <div id="moOrdersList">
+          <p class="mo-loading">Loading orders...</p>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("moClose").onclick =
+      () => modal.remove();
+
+    loadMyOrders();
+  }
+
+  async function loadMyOrders() {
+    const box = document.getElementById("moOrdersList");
+
+    if (!box) return;
+
+    try {
+      const orders = await customerApi(
+        "/rest/v1/orders" +
+        "?select=id,order_number,status,payment_status,subtotal,delivery_fee,total,created_at" +
+        "&order=created_at.desc"
+      );
+
+      if (!orders.length) {
+        box.innerHTML = `
+          <div class="mo-empty">
+            <div>🛍️</div>
+            <strong>No orders yet</strong>
+            <p>Your orders will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      box.innerHTML = "";
+
+      orders.forEach(order => {
+        const card = document.createElement("div");
+        card.className = "mo-order";
+
+        card.innerHTML = `
+          <div class="mo-order-top">
+            <div>
+              <strong>${escapeHtml(order.order_number)}</strong>
+              <small>${formatDate(order.created_at)}</small>
+            </div>
+
+            <span class="mo-status mo-${escapeHtml(order.status)}">
+              ${orderStatusLabel(order.status)}
+            </span>
+          </div>
+
+          <div class="mo-details">
+            <div>
+              <span>Subtotal</span>
+              <strong>₹${Number(order.subtotal || 0).toFixed(0)}</strong>
+            </div>
+
+            <div>
+              <span>Delivery</span>
+              <strong>₹${Number(order.delivery_fee || 0).toFixed(0)}</strong>
+            </div>
+
+            <div>
+              <span>Total</span>
+              <strong>₹${Number(order.total || 0).toFixed(0)}</strong>
+            </div>
+          </div>
+
+          <div class="mo-payment">
+            <span>Payment: ${escapeHtml(
+              order.payment_status || "pending"
+            ).toUpperCase()}</span>
+
+            <span>Cash on Delivery</span>
+          </div>
+        `;
+
+        box.appendChild(card);
+      });
+
+    } catch (e) {
+      box.innerHTML = `
+        <div class="mo-error">
+          ${escapeHtml(e.message)}
+        </div>
+      `;
+    }
+  }
+
+  function formatDate(value) {
+    try {
+      return new Date(value).toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  window.openMyOrders = openMyOrders;
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #delyvoMyOrders {
+      position:fixed;
+      inset:0;
+      z-index:99998;
+    }
+
+    .mo-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.55);
+    }
+
+    .mo-card {
+      position:relative;
+      z-index:2;
+      width:min(94%,700px);
+      max-height:86vh;
+      overflow:auto;
+      box-sizing:border-box;
+      margin:7vh auto 0;
+      padding:22px;
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 15px 50px rgba(0,0,0,.25);
+    }
+
+    .mo-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:15px;
+      margin-bottom:18px;
+    }
+
+    .mo-head h2 {
+      margin:0;
+    }
+
+    .mo-head p {
+      margin:4px 0 0;
+      color:#777;
+    }
+
+    .mo-close {
+      width:38px;
+      height:38px;
+      border:0;
+      border-radius:50%;
+      background:#f2f2f2;
+      font-size:25px;
+      cursor:pointer;
+    }
+
+    .mo-order {
+      padding:16px;
+      margin-bottom:12px;
+      border:1px solid #eee;
+      border-radius:14px;
+      background:#fafafa;
+    }
+
+    .mo-order-top {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+    }
+
+    .mo-order-top strong,
+    .mo-order-top small {
+      display:block;
+    }
+
+    .mo-order-top small {
+      color:#777;
+      margin-top:4px;
+    }
+
+    .mo-status {
+      padding:6px 9px;
+      border-radius:20px;
+      font-size:10px;
+      font-weight:800;
+      background:#eee;
+    }
+
+    .mo-placed,
+    .mo-pending {
+      background:#fff1c7;
+      color:#8a5b00;
+    }
+
+    .mo-confirmed,
+    .mo-packing,
+    .mo-packed {
+      background:#e7f0ff;
+      color:#2457a6;
+    }
+
+    .mo-out_for_delivery,
+    .mo-delivered {
+      background:#d9f7df;
+      color:#08752b;
+    }
+
+    .mo-cancelled,
+    .mo-refunded {
+      background:#ffe2e2;
+      color:#a40000;
+    }
+
+    .mo-details {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-top:15px;
+    }
+
+    .mo-details div {
+      padding:10px;
+      border-radius:10px;
+      background:#fff;
+    }
+
+    .mo-details span {
+      display:block;
+      color:#777;
+      font-size:12px;
+      margin-bottom:4px;
+    }
+
+    .mo-payment {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-top:12px;
+      padding-top:12px;
+      border-top:1px solid #eee;
+      color:#666;
+      font-size:13px;
+    }
+
+    .mo-loading,
+    .mo-empty,
+    .mo-error {
+      padding:30px;
+      text-align:center;
+    }
+
+    .mo-empty div {
+      font-size:35px;
+      margin-bottom:10px;
+    }
+
+    .mo-empty p {
+      color:#777;
+    }
+
+    .mo-error {
+      color:#b00020;
+    }
+
+    @media(max-width:600px) {
+      .mo-card {
+        width:96%;
+        margin-top:3vh;
+        padding:16px;
+      }
+
+      .mo-order-top {
+        align-items:flex-start;
+        flex-direction:column;
+      }
+
+      .mo-details {
+        grid-template-columns:1fr;
+      }
+
+      .mo-payment {
+        align-items:flex-start;
+        flex-direction:column;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  function refreshOrdersButton() {
+    const btn = document.getElementById("myOrdersBtn");
+    if (!btn) return;
+
+    btn.onclick = () => {
+      if (!localStorage.getItem("delyvo_access_token")) {
+        if (typeof window.openLogin === "function") {
+          window.openLogin();
+        } else {
+          alert("Please login first.");
+        }
+        return;
+      }
+
+      if (typeof window.openMyOrders === "function") {
+        window.openMyOrders();
+      }
+    };
+  }
+
+  refreshOrdersButton();
+
+  window.refreshOrdersButton = refreshOrdersButton;
+})();
+</script>
+
+
+<script>
+(() => {
+  const DLV_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  async function orderApi(path) {
+    const token = localStorage.getItem("delyvo_access_token");
+
+    if (!token) {
+      throw new Error("Please login first.");
+    }
+
+    const response = await fetch(DLV_URL + path, {
+      headers: {
+        apikey: DLV_KEY,
+        Authorization: "Bearer " + token
+      }
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        "Unable to load order"
+      );
+    }
+
+    return data;
+  }
+
+  function statusText(status) {
+    const map = {
+      placed: "Order Received",
+      pending: "Order Received",
+      confirmed: "Order Confirmed",
+      packing: "Packing",
+      packed: "Ready",
+      out_for_delivery: "Out for Delivery",
+      delivered: "Delivered",
+      cancelled: "Cancelled",
+      refunded: "Refunded"
+    };
+
+    return map[status] || status;
+  }
+
+  function statusStep(status) {
+    if (status === "placed" || status === "pending") return 1;
+    if (status === "confirmed") return 2;
+    if (status === "packing") return 3;
+    if (status === "packed") return 4;
+    if (status === "out_for_delivery") return 5;
+    if (status === "delivered") return 6;
+    return 0;
+  }
+
+  async function openOrderDetails(orderId) {
+    let old = document.getElementById("delyvoOrderDetails");
+    if (old) old.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "delyvoOrderDetails";
+
+    modal.innerHTML = `
+      <div class="od-backdrop"></div>
+
+      <div class="od-card">
+        <div class="od-head">
+          <div>
+            <h2>Order Details</h2>
+            <p id="odOrderNumber">Loading...</p>
+          </div>
+
+          <button class="od-close">×</button>
+        </div>
+
+        <div id="odContent">
+          <div class="od-loading">Loading order...</div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector(".od-close").onclick =
+      () => modal.remove();
+
+    try {
+      const orders = await orderApi(
+        "/rest/v1/orders" +
+        "?select=id,order_number,status,payment_status,subtotal,delivery_fee,total,created_at,delivered_at,address_id" +
+        "&id=eq." + encodeURIComponent(orderId) +
+        "&limit=1"
+      );
+
+      if (!orders.length) {
+        throw new Error("Order not found.");
+      }
+
+      const order = orders[0];
+
+      const items = await orderApi(
+        "/rest/v1/order_items" +
+        "?select=id,product_name,variant_name,quantity,unit_price,total" +
+        "&order_id=eq." + encodeURIComponent(orderId) +
+        "&order=id"
+      );
+
+      document.getElementById("odOrderNumber").textContent =
+        order.order_number;
+
+      const current = statusStep(order.status);
+
+      const steps = [
+        ["Order Received", 1],
+        ["Confirmed", 2],
+        ["Packing", 3],
+        ["Ready", 4],
+        ["Out for Delivery", 5],
+        ["Delivered", 6]
+      ];
+
+      let timeline = "";
+
+      steps.forEach(([label, step]) => {
+        let cls = "";
+
+        if (step < current) cls = "done";
+        if (step === current) cls = "active";
+
+        timeline += `
+          <div class="od-step ${cls}">
+            <div class="od-dot">${step < current ? "✓" : step}</div>
+            <span>${label}</span>
+          </div>
+        `;
+      });
+
+      let itemHtml = "";
+
+      items.forEach(item => {
+        itemHtml += `
+          <div class="od-item">
+            <div>
+              <strong>${escapeHtml(item.product_name)}</strong>
+              ${
+                item.variant_name
+                ? `<small>${escapeHtml(item.variant_name)}</small>`
+                : ""
+              }
+              <span>Qty: ${Number(item.quantity || 0)}</span>
+            </div>
+
+            <strong>
+              ₹${Number(item.total || 0).toFixed(0)}
+            </strong>
+          </div>
+        `;
+      });
+
+      if (!itemHtml) {
+        itemHtml = `<p class="od-muted">No item details available.</p>`;
+      }
+
+      document.getElementById("odContent").innerHTML = `
+        <div class="od-current">
+          <span>Current Status</span>
+          <strong>${escapeHtml(statusText(order.status))}</strong>
+        </div>
+
+        <div class="od-timeline">
+          ${timeline}
+        </div>
+
+        <div class="od-section">
+          <h3>Items</h3>
+          ${itemHtml}
+        </div>
+
+        <div class="od-section">
+          <h3>Bill Details</h3>
+
+          <div class="od-row">
+            <span>Subtotal</span>
+            <strong>₹${Number(order.subtotal || 0).toFixed(0)}</strong>
+          </div>
+
+          <div class="od-row">
+            <span>Delivery Fee</span>
+            <strong>₹${Number(order.delivery_fee || 0).toFixed(0)}</strong>
+          </div>
+
+          <div class="od-total">
+            <span>Total</span>
+            <strong>₹${Number(order.total || 0).toFixed(0)}</strong>
+          </div>
+        </div>
+
+        <div class="od-payment">
+          💵 Cash on Delivery
+          <span>${escapeHtml(
+            String(order.payment_status || "pending").toUpperCase()
+          )}</span>
+        </div>
+
+        <p class="od-date">
+          Ordered: ${formatDate(order.created_at)}
+        </p>
+      `;
+
+    } catch (error) {
+      document.getElementById("odContent").innerHTML = `
+        <div class="od-error">
+          ${escapeHtml(error.message)}
+        </div>
+      `;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function formatDate(value) {
+    try {
+      return new Date(value).toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  window.openOrderDetails = openOrderDetails;
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #delyvoOrderDetails {
+      position:fixed;
+      inset:0;
+      z-index:99997;
+    }
+
+    .od-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.55);
+    }
+
+    .od-card {
+      position:relative;
+      z-index:2;
+      width:min(94%,650px);
+      max-height:88vh;
+      overflow:auto;
+      box-sizing:border-box;
+      margin:5vh auto 0;
+      padding:22px;
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 15px 50px rgba(0,0,0,.25);
+    }
+
+    .od-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:15px;
+      margin-bottom:18px;
+    }
+
+    .od-head h2 {
+      margin:0;
+    }
+
+    .od-head p {
+      margin:4px 0 0;
+      color:#777;
+      font-weight:700;
+    }
+
+    .od-close {
+      width:38px;
+      height:38px;
+      border:0;
+      border-radius:50%;
+      background:#f2f2f2;
+      font-size:25px;
+      cursor:pointer;
+    }
+
+    .od-current {
+      padding:15px;
+      border-radius:13px;
+      background:#f5f8ff;
+      margin-bottom:18px;
+    }
+
+    .od-current span {
+      display:block;
+      color:#777;
+      font-size:12px;
+      margin-bottom:5px;
+    }
+
+    .od-current strong {
+      font-size:18px;
+    }
+
+    .od-timeline {
+      display:grid;
+      grid-template-columns:repeat(6,1fr);
+      gap:5px;
+      margin:25px 0;
+    }
+
+    .od-step {
+      text-align:center;
+      color:#aaa;
+      font-size:10px;
+    }
+
+    .od-dot {
+      width:30px;
+      height:30px;
+      margin:0 auto 7px;
+      border-radius:50%;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      background:#eee;
+      font-weight:800;
+    }
+
+    .od-step.done,
+    .od-step.active {
+      color:#111;
+    }
+
+    .od-step.done .od-dot,
+    .od-step.active .od-dot {
+      background:#111;
+      color:#fff;
+    }
+
+    .od-section {
+      margin-top:20px;
+    }
+
+    .od-section h3 {
+      margin-bottom:10px;
+    }
+
+    .od-item {
+      display:flex;
+      justify-content:space-between;
+      gap:15px;
+      padding:12px 0;
+      border-bottom:1px solid #eee;
+    }
+
+    .od-item small,
+    .od-item span {
+      display:block;
+      color:#777;
+      font-size:12px;
+      margin-top:3px;
+    }
+
+    .od-row,
+    .od-total {
+      display:flex;
+      justify-content:space-between;
+      padding:8px 0;
+    }
+
+    .od-total {
+      border-top:1px solid #eee;
+      margin-top:8px;
+      padding-top:13px;
+      font-size:18px;
+    }
+
+    .od-payment {
+      margin-top:18px;
+      padding:12px;
+      border-radius:10px;
+      background:#fff7df;
+      color:#715500;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      font-weight:700;
+    }
+
+    .od-date {
+      color:#777;
+      font-size:12px;
+      text-align:center;
+      margin-top:15px;
+    }
+
+    .od-muted,
+    .od-loading,
+    .od-error {
+      text-align:center;
+      padding:25px;
+    }
+
+    .od-error {
+      color:#b00020;
+    }
+
+    @media(max-width:600px) {
+      .od-card {
+        width:96%;
+        margin-top:3vh;
+        padding:16px;
+      }
+
+      .od-timeline {
+        grid-template-columns:repeat(3,1fr);
+        row-gap:15px;
+      }
+
+      .od-payment {
+        flex-direction:column;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  // My Orders cards mein View Details button add karna
+  const originalOpen = window.openMyOrders;
+
+  if (typeof originalOpen === "function") {
+    window.openMyOrders = async function() {
+      await originalOpen();
+
+      setTimeout(() => {
+        document.querySelectorAll(".mo-order").forEach(card => {
+          if (card.querySelector(".mo-view-details")) return;
+
+          const orderNumber =
+            card.querySelector(".mo-order-top strong")?.textContent?.trim();
+
+          if (!orderNumber) return;
+
+          const button = document.createElement("button");
+          button.className = "mo-view-details";
+          button.textContent = "View Details";
+
+          button.onclick = async () => {
+            try {
+              const orders = await orderApi(
+                "/rest/v1/orders" +
+                "?select=id,order_number" +
+                "&order_number=eq." +
+                encodeURIComponent(orderNumber) +
+                "&limit=1"
+              );
+
+              if (orders.length) {
+                openOrderDetails(orders[0].id);
+              }
+            } catch (error) {
+              alert(error.message);
+            }
+          };
+
+          card.appendChild(button);
+        });
+      }, 150);
+    };
+  }
+
+  const extraStyle = document.createElement("style");
+
+  extraStyle.textContent = `
+    .mo-view-details {
+      width:100%;
+      margin-top:12px;
+      padding:10px;
+      border:1px solid #ddd;
+      border-radius:9px;
+      background:#fff;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    .mo-view-details:hover {
+      background:#f5f5f5;
+    }
+  `;
+
+  document.head.appendChild(extraStyle);
+})();
+</script>
+
+
+<script>
+(() => {
+  const DLV_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function customerToken() {
+    return localStorage.getItem("delyvo_access_token") || "";
+  }
+
+  function clearCustomerSession() {
+    localStorage.removeItem("delyvo_access_token");
+    localStorage.removeItem("delyvo_refresh_token");
+  }
+
+  async function currentCustomer() {
+    const token = customerToken();
+    if (!token) return null;
+
+    try {
+      const response = await fetch(DLV_URL + "/auth/v1/user", {
+        headers: {
+          apikey: DLV_KEY,
+          Authorization: "Bearer " + token
+        }
+      });
+
+      if (!response.ok) {
+        clearCustomerSession();
+        return null;
+      }
+
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  function showAccount() {
+    let modal = document.getElementById("delyvoAccountModal");
+
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "delyvoAccountModal";
+
+      modal.innerHTML = `
+        <div class="da-backdrop"></div>
+
+        <div class="da-card">
+          <div class="da-head">
+            <div>
+              <h2>My Account</h2>
+              <p>Delyvo Customer</p>
+            </div>
+
+            <button class="da-close">×</button>
+          </div>
+
+          <div class="da-email" id="daEmail">
+            Loading...
+          </div>
+
+          <button class="da-orders">My Orders</button>
+          <button class="da-logout">Logout</button>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      modal.querySelector(".da-close").onclick =
+        () => modal.remove();
+
+      modal.querySelector(".da-backdrop").onclick =
+        () => modal.remove();
+
+      modal.querySelector(".da-orders").onclick = () => {
+        modal.remove();
+
+        if (typeof window.openMyOrders === "function") {
+          window.openMyOrders();
+        }
+      };
+
+      modal.querySelector(".da-logout").onclick = () => {
+        clearCustomerSession();
+        modal.remove();
+        updateCustomerAccountButton();
+        alert("Logout successful.");
+      };
+    }
+
+    currentCustomer().then(user => {
+      const email = user?.email || "Customer";
+      const emailBox = document.getElementById("daEmail");
+
+      if (emailBox) {
+        emailBox.textContent = email;
+      }
+    });
+  }
+
+  function updateCustomerAccountButton() {
+    const loginBtn = document.getElementById("loginBtn");
+
+    if (!loginBtn) return;
+
+    if (customerToken()) {
+      loginBtn.textContent = "Account";
+      loginBtn.classList.add("customer-logged-in");
+
+      loginBtn.onclick = showAccount;
+    } else {
+      loginBtn.textContent = "Login";
+      loginBtn.classList.remove("customer-logged-in");
+
+      loginBtn.onclick = () => {
+        if (typeof window.openLogin === "function") {
+          window.openLogin();
+        }
+      };
+    }
+  }
+
+  window.customerLogout = () => {
+    clearCustomerSession();
+    updateCustomerAccountButton();
+  };
+
+  // Existing auth form ko login ke saath connect karna
+  const authForm = document.getElementById("authForm");
+
+  if (authForm) {
+    authForm.addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const email =
+        document.getElementById("authEmail")?.value.trim();
+
+      const password =
+        document.getElementById("authPassword")?.value;
+
+      const message =
+        document.getElementById("authMessage");
+
+      if (!email || !password) {
+        if (message) {
+          message.textContent =
+            "Email aur password required hai.";
+        }
+        return;
+      }
+
+      try {
+        if (message) {
+          message.textContent = "Login ho raha hai...";
+        }
+
+        if (typeof window.authLogin !== "function") {
+          throw new Error("Login system unavailable.");
+        }
+
+        await window.authLogin(email, password);
+
+        if (message) {
+          message.textContent = "Login successful.";
+        }
+
+        updateCustomerAccountButton();
+
+        setTimeout(() => {
+          const modal =
+            document.getElementById("authModal");
+
+          if (modal) modal.style.display = "none";
+        }, 400);
+
+      } catch (error) {
+        if (message) {
+          message.textContent =
+            error.message || "Login failed.";
+        }
+      }
+    });
+  }
+
+  // Signup
+  const signupBtn = document.getElementById("signupBtn");
+
+  if (signupBtn) {
+    signupBtn.addEventListener("click", async () => {
+      const email =
+        document.getElementById("authEmail")?.value.trim();
+
+      const password =
+        document.getElementById("authPassword")?.value;
+
+      const message =
+        document.getElementById("authMessage");
+
+      if (!email || !password) {
+        if (message) {
+          message.textContent =
+            "Signup ke liye email aur password bharo.";
+        }
+        return;
+      }
+
+      if (password.length < 6) {
+        if (message) {
+          message.textContent =
+            "Password kam se kam 6 characters ka hona chahiye.";
+        }
+        return;
+      }
+
+      try {
+        if (message) {
+          message.textContent = "Account create ho raha hai...";
+        }
+
+        if (typeof window.authSignup !== "function") {
+          throw new Error("Signup system unavailable.");
+        }
+
+        const result =
+          await window.authSignup(email, password);
+
+        if (result?.access_token) {
+          localStorage.setItem(
+            "delyvo_access_token",
+            result.access_token
+          );
+
+          if (result.refresh_token) {
+            localStorage.setItem(
+              "delyvo_refresh_token",
+              result.refresh_token
+            );
+          }
+
+          updateCustomerAccountButton();
+
+          if (message) {
+            message.textContent =
+              "Account created successfully.";
+          }
+
+          setTimeout(() => {
+            const modal =
+              document.getElementById("authModal");
+
+            if (modal) modal.style.display = "none";
+          }, 500);
+        } else {
+          if (message) {
+            message.textContent =
+              "Account create ho gaya. Agar email confirmation maange to email confirm karo, phir login karo.";
+          }
+        }
+
+      } catch (error) {
+        if (message) {
+          message.textContent =
+            error.message || "Signup failed.";
+        }
+      }
+    });
+  }
+
+  // Existing Login button
+  const loginBtn = document.getElementById("loginBtn");
+
+  if (loginBtn) {
+    loginBtn.onclick = () => {
+      if (customerToken()) {
+        showAccount();
+      } else if (typeof window.openLogin === "function") {
+        window.openLogin();
+      }
+    };
+  }
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .customer-logged-in {
+      font-weight:700;
+    }
+
+    #delyvoAccountModal {
+      position:fixed;
+      inset:0;
+      z-index:99998;
+    }
+
+    .da-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.55);
+    }
+
+    .da-card {
+      position:relative;
+      z-index:2;
+      width:min(92%,430px);
+      margin:10vh auto 0;
+      padding:22px;
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 15px 50px rgba(0,0,0,.25);
+    }
+
+    .da-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:20px;
+    }
+
+    .da-head h2 {
+      margin:0;
+    }
+
+    .da-head p {
+      margin:4px 0 0;
+      color:#777;
+    }
+
+    .da-close {
+      width:38px;
+      height:38px;
+      border:0;
+      border-radius:50%;
+      background:#f2f2f2;
+      font-size:24px;
+      cursor:pointer;
+    }
+
+    .da-email {
+      padding:14px;
+      border-radius:10px;
+      background:#f5f5f5;
+      margin-bottom:15px;
+      word-break:break-word;
+      font-weight:600;
+    }
+
+    .da-orders,
+    .da-logout {
+      width:100%;
+      padding:12px;
+      margin-top:9px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    .da-orders {
+      border:1px solid #ddd;
+      background:#fff;
+    }
+
+    .da-logout {
+      border:0;
+      background:#111;
+      color:#fff;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  updateCustomerAccountButton();
+})();
+</script>
+
+
+
+
+
+<script>
+(() => {
+  const DLV_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function token() {
+    return localStorage.getItem("delyvo_access_token") || "";
+  }
+
+  async function addressApi(path, options = {}) {
+    if (!token()) {
+      throw new Error("Please login first.");
+    }
+
+    const response = await fetch(DLV_URL + path, {
+      ...options,
+      headers: {
+        apikey: DLV_KEY,
+        Authorization: "Bearer " + token(),
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        data?.hint ||
+        "Address request failed"
+      );
+    }
+
+    return data;
+  }
+
+  async function openAddressManager() {
+    let old = document.getElementById("delyvoAddressManager");
+    if (old) old.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "delyvoAddressManager";
+
+    modal.innerHTML = `
+      <div class="dam-backdrop"></div>
+
+      <div class="dam-card">
+        <div class="dam-head">
+          <div>
+            <h2>My Addresses</h2>
+            <p>Select delivery address</p>
+          </div>
+
+          <button class="dam-close">×</button>
+        </div>
+
+        <div id="damList">
+          Loading addresses...
+        </div>
+
+        <button id="damAdd" class="dam-add">
+          + Add New Address
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector(".dam-close").onclick =
+      () => modal.remove();
+
+    modal.querySelector(".dam-backdrop").onclick =
+      () => modal.remove();
+
+    modal.querySelector("#damAdd").onclick = () => {
+      showAddAddressForm();
+    };
+
+    await loadAddressList();
+  }
+
+  async function loadAddressList() {
+    const list = document.getElementById("damList");
+    if (!list) return;
+
+    try {
+      const addresses = await addressApi(
+        "/rest/v1/addresses" +
+        "?select=id,label,recipient_name,phone,address_line1,address_line2,landmark,city,state,pincode,is_default" +
+        "&order=is_default.desc,created_at.desc"
+      );
+
+      if (!addresses.length) {
+        list.innerHTML = `
+          <div class="dam-empty">
+            No saved address.
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = addresses.map(address => `
+        <div
+          class="dam-address ${
+            address.is_default ? "dam-default" : ""
+          }"
+        >
+          <div>
+            <strong>
+              ${escapeHtml(address.label || "Address")}
+            </strong>
+
+            ${
+              address.is_default
+                ? `<span class="dam-badge">DEFAULT</span>`
+                : ""
+            }
+
+            <p>
+              ${escapeHtml(address.recipient_name || "")}
+              ${
+                address.phone
+                  ? " · " + escapeHtml(address.phone)
+                  : ""
+              }
+            </p>
+
+            <p>
+              ${escapeHtml(address.address_line1 || "")}
+              ${
+                address.address_line2
+                  ? ", " + escapeHtml(address.address_line2)
+                  : ""
+              }
+            </p>
+
+            ${
+              address.landmark
+                ? `<p>Near ${escapeHtml(address.landmark)}</p>`
+                : ""
+            }
+
+            <p>
+              ${escapeHtml(address.city || "")},
+              ${escapeHtml(address.state || "")}
+              - ${escapeHtml(address.pincode || "")}
+            </p>
+          </div>
+
+          <button
+            class="dam-select"
+            data-address-id="${address.id}"
+          >
+            ${
+              address.is_default
+                ? "Selected"
+                : "Use This"
+            }
+          </button>
+        </div>
+      `).join("");
+
+      list.querySelectorAll(".dam-select").forEach(button => {
+        button.onclick = async () => {
+          const id = button.dataset.addressId;
+
+          const address =
+            addresses.find(item => item.id === id);
+
+          if (!address) return;
+
+          localStorage.setItem(
+            "delyvo_grocery_address",
+            JSON.stringify(address)
+          );
+
+          document.getElementById("locationText").textContent =
+            `${address.address_line1}, ${address.city}`;
+
+          const modal =
+            document.getElementById("delyvoAddressManager");
+
+          if (modal) modal.remove();
+
+          if (typeof window.openCheckout === "function") {
+            window.openCheckout();
+          }
+        };
+      });
+
+    } catch (error) {
+      list.innerHTML = `
+        <div class="dam-error">
+          ${escapeHtml(error.message)}
+        </div>
+      `;
+    }
+  }
+
+  function showAddAddressForm() {
+    const list = document.getElementById("damList");
+    if (!list) return;
+
+    list.innerHTML = `
+      <form id="damForm" class="dam-form">
+        <input name="label" placeholder="Label (Home / Work)" required>
+        <input name="recipient_name" placeholder="Your Name" required>
+        <input name="phone" placeholder="Phone Number" required>
+        <input name="address_line1" placeholder="Address" required>
+        <input name="address_line2" placeholder="Area / Street">
+        <input name="landmark" placeholder="Landmark">
+        <input name="city" value="Modinagar" placeholder="City" required>
+        <input name="state" value="Uttar Pradesh" placeholder="State">
+        <input name="pincode" value="201204" placeholder="Pincode" required>
+
+        <label class="dam-default-check">
+          <input type="checkbox" name="is_default" checked>
+          Make this default address
+        </label>
+
+        <button type="submit" class="dam-save">
+          Save Address
+        </button>
+
+        <button type="button" id="damCancel" class="dam-cancel">
+          Cancel
+        </button>
+
+        <p id="damMessage"></p>
+      </form>
+    `;
+
+    document.getElementById("damCancel").onclick =
+      loadAddressList;
+
+    document.getElementById("damForm").onsubmit =
+      async event => {
+        event.preventDefault();
+
+        const form = event.currentTarget;
+        const message =
+          document.getElementById("damMessage");
+
+        const data = Object.fromEntries(
+          new FormData(form).entries()
+        );
+
+        const payload = {
+          label: data.label,
+          recipient_name: data.recipient_name,
+          phone: data.phone,
+          address_line1: data.address_line1,
+          address_line2: data.address_line2 || null,
+          landmark: data.landmark || null,
+          city: data.city,
+          state: data.state || "Uttar Pradesh",
+          pincode: data.pincode,
+          is_default: form.is_default.checked
+        };
+
+        try {
+          message.textContent = "Saving...";
+
+          if (payload.pincode !== "201204") {
+            throw new Error(
+              "Abhi Delyvo delivery area sirf Modinagar 201204 hai."
+            );
+          }
+
+          await addressApi(
+            "/rest/v1/addresses",
+            {
+              method: "POST",
+              headers: {
+                Prefer: "return=representation"
+              },
+              body: JSON.stringify(payload)
+            }
+          );
+
+          message.textContent =
+            "Address saved successfully.";
+
+          await loadAddressList();
+
+        } catch (error) {
+          message.textContent =
+            error.message || "Address save failed.";
+        }
+      };
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  window.openAddressManager = openAddressManager;
+
+  const locationButton =
+    document.getElementById("locationBtn");
+
+  if (locationButton) {
+    locationButton.onclick = async () => {
+      if (!token()) {
+        if (typeof window.openLogin === "function") {
+          window.openLogin();
+        }
+        return;
+      }
+
+      await openAddressManager();
+    };
+  }
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #delyvoAddressManager {
+      position:fixed;
+      inset:0;
+      z-index:99996;
+    }
+
+    .dam-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.55);
+    }
+
+    .dam-card {
+      position:relative;
+      z-index:2;
+      width:min(94%,620px);
+      max-height:88vh;
+      overflow:auto;
+      margin:5vh auto 0;
+      padding:20px;
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 15px 50px rgba(0,0,0,.25);
+    }
+
+    .dam-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:18px;
+    }
+
+    .dam-head h2 {
+      margin:0;
+    }
+
+    .dam-head p {
+      margin:4px 0 0;
+      color:#777;
+    }
+
+    .dam-close {
+      width:38px;
+      height:38px;
+      border:0;
+      border-radius:50%;
+      background:#f2f2f2;
+      font-size:24px;
+      cursor:pointer;
+    }
+
+    .dam-address {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:14px;
+      margin-bottom:10px;
+      border:1px solid #ddd;
+      border-radius:12px;
+    }
+
+    .dam-default {
+      border-width:2px;
+    }
+
+    .dam-address p {
+      margin:5px 0;
+      color:#666;
+      font-size:13px;
+    }
+
+    .dam-badge {
+      display:inline-block;
+      margin-left:6px;
+      padding:3px 6px;
+      border-radius:5px;
+      background:#eee;
+      font-size:9px;
+      font-weight:800;
+    }
+
+    .dam-select,
+    .dam-add,
+    .dam-save,
+    .dam-cancel {
+      padding:9px 12px;
+      border-radius:9px;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    .dam-select {
+      height:max-content;
+      border:1px solid #ddd;
+      background:#fff;
+    }
+
+    .dam-add,
+    .dam-save {
+      width:100%;
+      border:0;
+      background:#111;
+      color:#fff;
+      margin-top:12px;
+    }
+
+    .dam-cancel {
+      width:100%;
+      border:1px solid #ddd;
+      background:#fff;
+      margin-top:8px;
+    }
+
+    .dam-form {
+      display:grid;
+      gap:9px;
+    }
+
+    .dam-form input:not([type="checkbox"]) {
+      box-sizing:border-box;
+      width:100%;
+      padding:11px;
+      border:1px solid #ddd;
+      border-radius:9px;
+    }
+
+    .dam-default-check {
+      font-size:13px;
+      color:#555;
+    }
+
+    .dam-empty,
+    .dam-error {
+      text-align:center;
+      padding:25px;
+      color:#777;
+    }
+
+    .dam-error {
+      color:#b00020;
+    }
+
+    #damMessage {
+      text-align:center;
+      font-size:13px;
+    }
+
+    @media(max-width:600px) {
+      .dam-card {
+        width:96%;
+        margin-top:3vh;
+        padding:16px;
+      }
+
+      .dam-address {
+        flex-direction:column;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  function getCartData() {
+    try {
+      return JSON.parse(
+        localStorage.getItem("delyvo_grocery_cart") || "[]"
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  function saveCartData(cart) {
+    localStorage.setItem(
+      "delyvo_grocery_cart",
+      JSON.stringify(cart)
+    );
+  }
+
+  function renderFinalCart() {
+    const cart = getCartData();
+
+    const count = cart.reduce(
+      (sum, item) => sum + Number(item.quantity || 0),
+      0
+    );
+
+    const subtotal = cart.reduce(
+      (sum, item) =>
+        sum +
+        Number(item.price || 0) *
+        Number(item.quantity || 0),
+      0
+    );
+
+    const delivery = subtotal >= 199 ? 29 : 0;
+    const total = subtotal + delivery;
+
+    const countEl =
+      document.getElementById("cartCount");
+
+    if (countEl) {
+      countEl.textContent = count;
+    }
+
+    const box =
+      document.getElementById("cartItems") ||
+      document.getElementById("cartContent");
+
+    if (!box) return;
+
+    if (!cart.length) {
+      box.innerHTML = `
+        <div class="dc-empty-cart">
+          <div class="dc-empty-icon">🛒</div>
+          <h3>Your cart is empty</h3>
+          <p>Add grocery products to continue.</p>
+        </div>
+      `;
+      updateCartTotals(0, 0, 0);
+      return;
+    }
+
+    box.innerHTML = cart.map((item, index) => {
+      const qty = Number(item.quantity || 0);
+      const price = Number(item.price || 0);
+      const line = price * qty;
+
+      return `
+        <div class="dc-cart-item">
+          <div class="dc-cart-info">
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>₹${price}</small>
+          </div>
+
+          <div class="dc-cart-actions">
+            <button
+              class="dc-qty"
+              data-action="minus"
+              data-index="${index}"
+            >−</button>
+
+            <span>${qty}</span>
+
+            <button
+              class="dc-qty"
+              data-action="plus"
+              data-index="${index}"
+            >+</button>
+
+            <strong>₹${line}</strong>
+
+            <button
+              class="dc-remove"
+              data-action="remove"
+              data-index="${index}"
+            >Remove</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    box.querySelectorAll("[data-action]").forEach(button => {
+      button.onclick = () => {
+        const index =
+          Number(button.dataset.index);
+
+        const action =
+          button.dataset.action;
+
+        const current = getCartData();
+
+        if (!current[index]) return;
+
+        if (action === "plus") {
+          current[index].quantity =
+            Number(current[index].quantity || 0) + 1;
+        }
+
+        if (action === "minus") {
+          current[index].quantity =
+            Number(current[index].quantity || 0) - 1;
+
+          if (current[index].quantity <= 0) {
+            current.splice(index, 1);
+          }
+        }
+
+        if (action === "remove") {
+          current.splice(index, 1);
+        }
+
+        saveCartData(current);
+        renderFinalCart();
+      });
+    });
+
+    updateCartTotals(
+      subtotal,
+      delivery,
+      total
+    );
+  }
+
+  function updateCartTotals(
+    subtotal,
+    delivery,
+    total
+  ) {
+    const subtotalEl =
+      document.getElementById("cartSubtotal");
+
+    const deliveryEl =
+      document.getElementById("cartDelivery");
+
+    const totalEl =
+      document.getElementById("cartTotal");
+
+    if (subtotalEl) {
+      subtotalEl.textContent =
+        "₹" + subtotal.toFixed(0);
+    }
+
+    if (deliveryEl) {
+      deliveryEl.textContent =
+        "₹" + delivery.toFixed(0);
+    }
+
+    if (totalEl) {
+      totalEl.textContent =
+        "₹" + total.toFixed(0);
+    }
+
+    const minMessage =
+      document.getElementById("cartMinimumMessage");
+
+    if (minMessage) {
+      if (subtotal > 0 && subtotal < 199) {
+        minMessage.textContent =
+          "Minimum order ₹199 hai.";
+        minMessage.style.display = "block";
+      } else {
+        minMessage.style.display = "none";
+      }
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  window.renderFinalCart = renderFinalCart;
+
+  const style =
+    document.createElement("style");
+
+  style.textContent = `
+    .dc-empty-cart {
+      text-align:center;
+      padding:40px 20px;
+      color:#777;
+    }
+
+    .dc-empty-icon {
+      font-size:45px;
+      margin-bottom:10px;
+    }
+
+    .dc-cart-item {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:15px;
+      padding:14px 0;
+      border-bottom:1px solid #eee;
+    }
+
+    .dc-cart-info strong,
+    .dc-cart-info small {
+      display:block;
+    }
+
+    .dc-cart-info small {
+      color:#777;
+      margin-top:5px;
+    }
+
+    .dc-cart-actions {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .dc-qty {
+      width:32px;
+      height:32px;
+      border:1px solid #ddd;
+      border-radius:8px;
+      background:#fff;
+      cursor:pointer;
+      font-size:18px;
+    }
+
+    .dc-remove {
+      border:0;
+      background:transparent;
+      color:#b00020;
+      cursor:pointer;
+      font-size:12px;
+    }
+
+    #cartMinimumMessage {
+      padding:10px;
+      margin-top:10px;
+      border-radius:8px;
+      background:#fff3cd;
+      color:#8a5b00;
+      font-weight:700;
+    }
+
+    @media(max-width:600px) {
+      .dc-cart-item {
+        align-items:flex-start;
+        flex-direction:column;
+      }
+
+      .dc-cart-actions {
+        width:100%;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      renderFinalCart
+    );
+  } else {
+    renderFinalCart();
+  }
+})();
+</script>
+
+
+<script>
+(() => {
+  function addCODCheckout() {
+    if (document.getElementById("delyvoCODBox")) return;
+
+    const checkout =
+      document.getElementById("checkoutModal");
+
+    if (!checkout) return;
+
+    const box = document.createElement("div");
+    box.id = "delyvoCODBox";
+
+    box.innerHTML = `
+      <div class="cod-title">Payment Method</div>
+
+      <label class="cod-option">
+        <input
+          type="radio"
+          name="delyvoPaymentMethod"
+          value="cod"
+          checked
+        >
+        <span>
+          <strong>Cash on Delivery</strong>
+          <small>Delivery ke time cash pay karein.</small>
+        </span>
+      </label>
+
+      <div class="cod-note">
+        Abhi Delyvo par Cash on Delivery available hai.
+      </div>
+    `;
+
+    const summary =
+      document.getElementById("checkoutSummary");
+
+    if (summary) {
+      summary.appendChild(box);
+    } else {
+      checkout.appendChild(box);
+    }
+  }
+
+  const style =
+    document.createElement("style");
+
+  style.textContent = `
+    #delyvoCODBox {
+      margin-top:16px;
+      padding:14px;
+      border:1px solid #ddd;
+      border-radius:12px;
+      background:#fafafa;
+    }
+
+    .cod-title {
+      font-weight:700;
+      margin-bottom:10px;
+    }
+
+    .cod-option {
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      cursor:pointer;
+    }
+
+    .cod-option input {
+      margin-top:4px;
+    }
+
+    .cod-option strong,
+    .cod-option small {
+      display:block;
+    }
+
+    .cod-option small {
+      margin-top:4px;
+      color:#777;
+    }
+
+    .cod-note {
+      margin-top:10px;
+      padding:9px;
+      border-radius:8px;
+      background:#eef7ee;
+      color:#28752d;
+      font-size:13px;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  window.addDelyvoCODCheckout =
+    addCODCheckout;
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      addCODCheckout
+    );
+  } else {
+    addCODCheckout();
+  }
+})();
+</script>
+
+
+<script>
+(() => {
+  function showFinalOrderSuccess(order) {
+    const old = document.getElementById("delyvoFinalSuccess");
+    if (old) old.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "delyvoFinalSuccess";
+
+    modal.innerHTML = `
+      <div class="fos-backdrop"></div>
+
+      <div class="fos-card">
+        <div class="fos-icon">✓</div>
+
+        <h2>Order Placed!</h2>
+
+        <p class="fos-thanks">
+          Thank you for ordering from Delyvo.
+        </p>
+
+        <div class="fos-order">
+          <span>Order Number</span>
+          <strong>
+            ${escapeHtml(order?.order_number || "Delyvo Order")}
+          </strong>
+        </div>
+
+        <div class="fos-order">
+          <span>Total Amount</span>
+          <strong>
+            ₹${Number(order?.total || 0).toFixed(0)}
+          </strong>
+        </div>
+
+        <div class="fos-status">
+          <span>●</span>
+          Order received
+        </div>
+
+        <button id="fosOrders">
+          View My Orders
+        </button>
+
+        <button id="fosContinue">
+          Continue Shopping
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("fosOrders").onclick = () => {
+      modal.remove();
+
+      if (typeof window.openMyOrders === "function") {
+        window.openMyOrders();
+      }
+    };
+
+    document.getElementById("fosContinue").onclick = () => {
+      modal.remove();
+    };
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+const style =
+    document.createElement("style");
+
+  style.textContent = `
+    #delyvoFinalSuccess {
+      position:fixed;
+      inset:0;
+      z-index:99999;
+    }
+
+    .fos-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.55);
+    }
+
+    .fos-card {
+      position:relative;
+      z-index:2;
+      width:min(92%,430px);
+      margin:10vh auto 0;
+      padding:28px;
+      text-align:center;
+      background:#fff;
+      border-radius:20px;
+      box-shadow:0 18px 60px rgba(0,0,0,.25);
+    }
+
+    .fos-icon {
+      width:62px;
+      height:62px;
+      margin:0 auto 14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:50%;
+      background:#d9f7df;
+      color:#08752b;
+      font-size:34px;
+      font-weight:800;
+    }
+
+    .fos-card h2 {
+      margin:0;
+    }
+
+    .fos-thanks {
+      color:#777;
+    }
+
+    .fos-order {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px;
+      margin-top:8px;
+      border-radius:10px;
+      background:#f7f7f7;
+      text-align:left;
+    }
+
+    .fos-order span {
+      color:#777;
+    }
+
+    .fos-status {
+      margin:16px 0;
+      padding:10px;
+      border-radius:9px;
+      background:#eef7ee;
+      color:#28752d;
+      font-weight:700;
+    }
+
+    .fos-status span {
+      margin-right:5px;
+    }
+
+    #fosOrders,
+    #fosContinue {
+      width:100%;
+      padding:12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    #fosOrders {
+      border:0;
+      background:#111;
+      color:#fff;
+    }
+
+    #fosContinue {
+      margin-top:8px;
+      border:1px solid #ddd;
+      background:#fff;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,2476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delyvo Shop Panel</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#171717}
+header{background:#111;color:white;padding:18px 20px;display:flex;justify-content:space-between;align-items:center}
+main{max-width:1100px;margin:20px auto;padding:0 15px}
+.card{background:white;border-radius:12px;padding:18px;margin-bottom:15px;box-shadow:0 2px 10px #00000012}
+input,button,select{padding:11px;border-radius:8px;border:1px solid #ddd;font-size:15px}
+input{width:100%;margin-bottom:10px}
+button{cursor:pointer}
+.primary{background:#111;color:white;border:0}
+.order{border:1px solid #eee;border-radius:10px;padding:15px;margin-top:12px}
+.row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.status{font-weight:bold}
+.items{margin:10px 0;padding-left:18px}
+.error{color:#b00020}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <b>DELYVO</b>
+    <div>Grocery Shop Panel</div>
+  </div>
+  <button id="logoutBtn">Logout</button>
+</header>
+
+<main>
+
+<div id="loginBox" class="card">
+  <h2>Shop Login</h2>
+  <input id="email" type="email" placeholder="Staff email">
+  <input id="password" type="password" placeholder="Password">
+  <button id="login" class="primary">Login</button>
+  <p id="loginMsg"></p>
+</div>
+
+<div id="shopBox" style="display:none">
+  <div class="card">
+    <div class="row">
+      <div>
+        <h2 style="margin:0">Orders</h2>
+        <small>Modinagar Store · 201204</small>
+      </div>
+      <button id="refresh" class="primary">Refresh</button>
+    </div>
+  </div>
+
+  <div id="orders"></div>
+</div>
+
+</main>
+
+<script>
+const SUPABASE_URL="https://unwdkreujyejgcucgttj.supabase.co";
+const SUPABASE_KEY="sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+function token(){
+  return localStorage.getItem("delyvo_shop_token");
+}
+
+async function login(){
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  const msg=document.getElementById("loginMsg");
+
+  msg.textContent="Login ho raha hai...";
+
+  const r=await fetch(
+    SUPABASE_URL+"/auth/v1/token?grant_type=password",
+    {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        apikey:SUPABASE_KEY
+      },
+      body:JSON.stringify({email,password})
+    }
+  );
+
+  const d=await r.json();
+
+  if(!r.ok){
+    msg.className="error";
+    msg.textContent=d.msg||d.message||"Login failed";
+    return;
+  }
+
+  localStorage.setItem("delyvo_shop_token",d.access_token);
+  localStorage.setItem("delyvo_shop_refresh",d.refresh_token);
+
+  await loadShop();
+}
+
+async function api(path,options={}){
+  const headers={
+    apikey:SUPABASE_KEY,
+    Authorization:"Bearer "+token(),
+    ...options.headers
+  };
+
+  return fetch(SUPABASE_URL+path,{...options,headers});
+}
+
+window.loadShopOrders = async function() {
+  const tokenValue =
+    localStorage.getItem("delyvo_shop_token") || "";
+
+  if (!tokenValue) {
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("shopBox").style.display = "none";
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      SUPABASE_URL +
+      "/rest/v1/orders" +
+      "?select=id,order_number,status,payment_status,subtotal,delivery_fee,total,created_at,address_id," +
+      "order_items(id,product_name,variant_name,quantity,unit_price,total)," +
+      "addresses(recipient_name,phone,address_line1,address_line2,landmark,city,state,pincode)" +
+      "&order=created_at.desc",
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + tokenValue
+        }
+      }
+    );
+
+    const data = await response.json().catch(() => []);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.hint ||
+        data?.details ||
+        "Orders load nahi ho paye."
+      );
+    }
+
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("shopBox").style.display = "block";
+
+    const orders = Array.isArray(data) ? data : [];
+
+    window.renderFinalShopOrders(orders);
+
+    if (typeof window.addFinalShopOrderFilters === "function") {
+      window.addFinalShopOrderFilters();
+    }
+
+    if (typeof window.filterFinalShopOrders === "function") {
+      window.filterFinalShopOrders();
+    }
+
+    return orders;
+
+  } catch (error) {
+    console.error("DELYVO SHOP ORDERS ERROR:", error);
+
+    const msg = document.getElementById("loginMsg");
+
+    if (msg) {
+      msg.className = "error";
+      msg.textContent =
+        error?.message ||
+        "Orders load nahi ho paye.";
+    }
+
+    return [];
+  }
+};
+
+
+async function loadShop() {
+  return await window.loadShopOrders();
+}
+
+
+document.getElementById("login").onclick=login;
+document.getElementById("refresh").onclick=loadShop;
+
+document.getElementById("logoutBtn").onclick=()=>{
+  localStorage.removeItem("delyvo_shop_token");
+  localStorage.removeItem("delyvo_shop_refresh");
+  location.reload();
+};
+
+if(token()) loadShop();
+</script>
+
+
+<script>
+(() => {
+if(token()) loadShop();
+</script>
+
+
+<script>
+(() => {
+  const URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+  const STORE_ID = "7ef989c8-9826-437b-8a63-bb0dfa817540";
+
+  function token() {
+    return localStorage.getItem("delyvo_shop_token") || "";
+  }
+
+  async function api(path, options = {}) {
+    const headers = {
+      apikey: KEY,
+      Authorization: "Bearer " + token(),
+  async function orderApi(path, options = {}) {
+    const r = await fetch(URL + path, {
+      ...options,
+      headers: {
+        apikey: KEY,
+        Authorization: "Bearer " + shopToken(),
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        data?.error ||
+        "Order request failed"
+      );
+    }
+
+    return data;
+  }
+
+  function nextStatus(status) {
+    const flow = {
+      placed: "confirmed",
+      pending: "confirmed",
+      confirmed: "packing",
+      packing: "packed",
+      packed: "out_for_delivery",
+      out_for_delivery: "delivered"
+    };
+
+    return flow[status] || null;
+  }
+
+  function statusLabel(status) {
+    const labels = {
+      placed: "NEW",
+      pending: "NEW",
+      confirmed: "CONFIRMED",
+      packing: "PACKING",
+      packed: "READY",
+      out_for_delivery: "OUT FOR DELIVERY",
+      delivered: "DELIVERED",
+      cancelled: "CANCELLED"
+    };
+
+    return labels[status] || String(status || "").toUpperCase();
+  }
+
+})();
+</script>
+
+
+<script>
+(() => {
+  const DLV_SUPABASE_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_SUPABASE_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function shopToken() {
+    return localStorage.getItem("delyvo_shop_token") || "";
+  }
+
+  async function shopRequest(path, options = {}) {
+    const response = await fetch(
+      DLV_SUPABASE_URL + path,
+      {
+        ...options,
+        headers: {
+          apikey: DLV_SUPABASE_KEY,
+          Authorization: "Bearer " + shopToken(),
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        }
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        data?.hint ||
+        "Shop request failed"
+      );
+    }
+
+    return data;
+  }
+
+  async function markShopOrderDelivered(orderId) {
+    if (!orderId) return;
+
+    if (!shopToken()) {
+      alert("Shop login required.");
+      return;
+    }
+
+    try {
+      const deliveries = await shopRequest(
+        "/rest/v1/deliveries" +
+        "?select=id,status,order_id" +
+        "&order_id=eq." + encodeURIComponent(orderId) +
+        "&limit=1"
+      );
+
+      if (!deliveries || !deliveries.length) {
+        throw new Error(
+          "Delivery record nahi mila. Pehle order ko Out for Delivery karo."
+        );
+      }
+
+      const delivery = deliveries[0];
+
+      await shopRequest(
+        "/rest/v1/deliveries?id=eq." +
+        encodeURIComponent(delivery.id),
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: "delivered",
+            delivered_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+
+      await shopRequest(
+        "/rest/v1/rpc/transition_order_status",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            p_order_id: orderId,
+            p_new_status: "delivered"
+          })
+        }
+      );
+
+      alert("Order delivered successfully.");
+
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      } else if (typeof window.loadOrders === "function") {
+        await window.loadOrders();
+      } else {
+        location.reload();
+      }
+
+    } catch (error) {
+      alert(error.message || "Order delivery update failed.");
+    }
+  }
+
+  window.markShopOrderDelivered = markShopOrderDelivered;
+})();
+</script>
+
+
+<script>
+(() => {
+  const DLV_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function shopToken() {
+    return localStorage.getItem("delyvo_shop_token") || "";
+  }
+
+  async function rejectShopOrder(orderId) {
+    if (!orderId) return;
+
+    if (!shopToken()) {
+      alert("Shop login required.");
+      return;
+    }
+
+    const ok = confirm(
+      "Kya aap is order ko reject/cancel karna chahte ho?"
+    );
+
+    if (!ok) return;
+
+    try {
+      const response = await fetch(
+        DLV_URL + "/rest/v1/rpc/transition_order_status",
+        {
+          method: "POST",
+          headers: {
+            apikey: DLV_KEY,
+            Authorization: "Bearer " + shopToken(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            p_order_id: orderId,
+            p_new_status: "cancelled"
+          })
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+          data?.msg ||
+          data?.hint ||
+          "Order reject failed"
+        );
+      }
+
+      alert("Order rejected successfully.");
+
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      } else if (typeof window.loadOrders === "function") {
+        await window.loadOrders();
+      } else {
+        location.reload();
+      }
+
+    } catch (error) {
+      alert(error.message || "Order reject failed.");
+    }
+  }
+
+  window.rejectShopOrder = rejectShopOrder;
+
+
+
+<script>
+(() => {
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .shop-order-card {
+      background:#fff;
+      border:1px solid #e5e5e5;
+      border-radius:16px;
+      padding:16px;
+      margin-bottom:14px;
+      box-shadow:0 3px 12px rgba(0,0,0,.05);
+    }
+
+    .shop-order-top {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .shop-order-number {
+      font-weight:800;
+      font-size:16px;
+    }
+
+    .shop-order-date {
+      color:#777;
+      font-size:12px;
+      margin-top:3px;
+    }
+
+    .shop-order-status {
+      padding:6px 9px;
+      border-radius:8px;
+      background:#f1f1f1;
+      font-size:11px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .shop-customer-box {
+      background:#f8f8f8;
+      border-radius:11px;
+      padding:11px;
+      margin-bottom:12px;
+    }
+
+    .shop-customer-box strong {
+      display:block;
+      margin-bottom:4px;
+    }
+
+    .shop-customer-box span {
+      display:block;
+      color:#666;
+      font-size:13px;
+      margin-top:2px;
+    }
+
+    .shop-order-items {
+      border-top:1px solid #eee;
+      border-bottom:1px solid #eee;
+      padding:10px 0;
+      margin-bottom:12px;
+    }
+
+    .shop-order-item {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      padding:5px 0;
+      font-size:13px;
+    }
+
+    .shop-order-total {
+      display:flex;
+      justify-content:space-between;
+      font-size:17px;
+      font-weight:800;
+      margin-bottom:12px;
+    }
+
+    .shop-order-actions {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+
+    .shop-order-actions button {
+      padding:9px 12px;
+      border:1px solid #ddd;
+      border-radius:9px;
+      background:#fff;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .shop-order-actions button:hover {
+      background:#f5f5f5;
+    }
+
+    .shop-order-actions .danger {
+      color:#b00020;
+    }
+
+    .shop-order-empty {
+      padding:30px 15px;
+      text-align:center;
+      color:#777;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  function addOrderFilters() {
+    const section =
+      document.querySelector("#ordersSection") ||
+      document.querySelector(".orders-section");
+
+    if (!section) return;
+
+    if (document.getElementById("shopOrderFilters")) return;
+
+    const box = document.createElement("div");
+    box.id = "shopOrderFilters";
+
+    box.innerHTML = `
+      <div class="sof-row">
+        <input
+          id="shopOrderSearch"
+          type="search"
+          placeholder="Search order number or customer..."
+        >
+
+        <select id="shopOrderStatusFilter">
+          <option value="all">All Orders</option>
+          <option value="placed">New</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="packing">Packing</option>
+          <option value="packed">Ready</option>
+          <option value="out_for_delivery">Out for Delivery</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+    `;
+
+    section.prepend(box);
+
+    document
+      .getElementById("shopOrderSearch")
+      .addEventListener("input", filterShopOrders);
+
+    document
+      .getElementById("shopOrderStatusFilter")
+      .addEventListener("change", filterShopOrders);
+  }
+
+  function filterShopOrders() {
+    const search =
+      (
+        document.getElementById("shopOrderSearch")?.value ||
+        ""
+      ).toLowerCase().trim();
+
+    const status =
+      document.getElementById("shopOrderStatusFilter")?.value ||
+      "all";
+
+    document.querySelectorAll(".shop-order-card").forEach(card => {
+      const text = card.textContent.toLowerCase();
+
+      const matchesSearch =
+        !search || text.includes(search);
+
+      const cardStatus =
+        card.dataset.status || "";
+
+      const matchesStatus =
+        status === "all" ||
+        cardStatus === status;
+
+      card.style.display =
+        matchesSearch && matchesStatus
+          ? ""
+          : "none";
+    });
+  }
+
+  window.addShopOrderFilters = addOrderFilters;
+
+  window.addEventListener("load", () => {
+    setTimeout(addOrderFilters, 400);
+  });
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #shopOrderFilters {
+      margin:12px 0 18px;
+    }
+
+    .sof-row {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    #shopOrderSearch,
+    #shopOrderStatusFilter {
+      box-sizing:border-box;
+      min-height:42px;
+      padding:9px 12px;
+      border:1px solid #ddd;
+      border-radius:10px;
+      background:#fff;
+      font-size:14px;
+    }
+
+    #shopOrderSearch {
+      flex:1;
+      min-width:220px;
+    }
+
+    #shopOrderStatusFilter {
+      min-width:170px;
+    }
+
+    @media(max-width:600px) {
+      #shopOrderSearch,
+      #shopOrderStatusFilter {
+        width:100%;
+        min-width:0;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  function addProductFilters() {
+    if (document.getElementById("shopProductFilters")) return;
+
+    const productSection =
+      document.querySelector("#productsSection") ||
+      document.querySelector(".products-section");
+
+    if (!productSection) return;
+
+    const box = document.createElement("div");
+    box.id = "shopProductFilters";
+
+    box.innerHTML = `
+      <div class="spf-row">
+        <input
+          id="shopProductSearch"
+          type="search"
+          placeholder="Search product..."
+        >
+
+        <select id="shopProductStatus">
+          <option value="all">All Products</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="low">Low Stock</option>
+        </select>
+      </div>
+    `;
+
+    productSection.prepend(box);
+
+    document
+      .getElementById("shopProductSearch")
+      .addEventListener("input", filterShopProducts);
+
+    document
+      .getElementById("shopProductStatus")
+      .addEventListener("change", filterShopProducts);
+  }
+
+  function filterShopProducts() {
+    const search =
+      (
+        document.getElementById("shopProductSearch")?.value ||
+        ""
+      ).toLowerCase().trim();
+
+    const status =
+      document.getElementById("shopProductStatus")?.value ||
+      "all";
+
+    document.querySelectorAll(
+      "#productsSection tbody tr, .products-section tbody tr"
+    ).forEach(row => {
+      const text = row.textContent.toLowerCase();
+
+      const matchesSearch =
+        !search || text.includes(search);
+
+      const activeButton =
+        row.querySelector(
+          ".product-active-toggle, .variant-active-toggle"
+        );
+
+      const isActive =
+        activeButton?.dataset.active !== "false";
+
+      const stockText =
+        row.querySelector(
+          ".stock-input, input[name*='stock'], input[type='number']"
+        )?.value;
+
+      const stock =
+        Number(stockText || 0);
+
+      let matchesStatus = true;
+
+      if (status === "active") {
+        matchesStatus = isActive;
+      }
+
+      if (status === "inactive") {
+        matchesStatus = !isActive;
+      }
+
+      if (status === "low") {
+        matchesStatus = stock <= 5;
+      }
+
+      row.style.display =
+        matchesSearch && matchesStatus
+          ? ""
+          : "none";
+    });
+  }
+
+  window.addShopProductFilters = addProductFilters;
+
+  window.addEventListener("load", () => {
+    setTimeout(addProductFilters, 500);
+  });
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #shopProductFilters {
+      margin:12px 0 18px;
+    }
+
+    .spf-row {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    #shopProductSearch,
+    #shopProductStatus {
+      min-height:42px;
+      padding:9px 12px;
+      border:1px solid #ddd;
+      border-radius:10px;
+      background:#fff;
+      font-size:14px;
+      box-sizing:border-box;
+    }
+
+    #shopProductSearch {
+      flex:1;
+      min-width:220px;
+    }
+
+    #shopProductStatus {
+      min-width:170px;
+    }
+
+    @media(max-width:600px) {
+      #shopProductSearch,
+      #shopProductStatus {
+        width:100%;
+        min-width:0;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  let shopRefreshTimer = null;
+
+  function startShopAutoRefresh() {
+    if (shopRefreshTimer) {
+      clearInterval(shopRefreshTimer);
+    }
+
+    shopRefreshTimer = setInterval(async () => {
+      if (!localStorage.getItem("delyvo_shop_token")) {
+        return;
+      }
+
+      try {
+        if (typeof window.loadShopOrders === "function") {
+          await window.loadShopOrders();
+        } else if (typeof window.loadOrders === "function") {
+          await window.loadOrders();
+        }
+
+        if (typeof window.loadFinalShopDashboard === "function") {
+          await window.loadFinalShopDashboard();
+        }
+      } catch (error) {
+        console.log("Shop auto refresh:", error.message);
+      }
+    }, 30000);
+  }
+
+  window.startShopAutoRefresh = startShopAutoRefresh;
+
+  window.addEventListener("load", () => {
+    setTimeout(startShopAutoRefresh, 1500);
+  });
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .shop-refresh-info {
+      margin:8px 0 14px;
+      padding:8px 11px;
+      border-radius:8px;
+      background:#f5f5f5;
+      color:#666;
+      font-size:12px;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  const info = document.createElement("div");
+  info.className = "shop-refresh-info";
+  info.textContent = "Orders automatically refresh every 30 seconds.";
+
+  const ordersSection =
+    document.querySelector("#ordersSection") ||
+    document.querySelector(".orders-section");
+
+  if (ordersSection) {
+    ordersSection.prepend(info);
+  }
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP PANEL - FINAL ORDER MANAGEMENT
+   ========================================================= */
+
+window.renderFinalShopOrders = function(orders) {
+  const container =
+    document.getElementById("shopOrdersList") ||
+    document.getElementById("ordersList") ||
+    document.getElementById("shop-orders-list");
+
+  if (!container) return;
+
+  if (!Array.isArray(orders) || !orders.length) {
+    container.innerHTML = `
+      <div class="shop-order-empty">
+        <h3>No Orders</h3>
+        <p>Abhi koi customer order nahi hai.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = orders.map(order => {
+    const status = String(order.status || "pending").toLowerCase();
+
+    const address = order.addresses || order.address || {};
+    const items = Array.isArray(order.order_items)
+      ? order.order_items
+      : [];
+
+    const itemHtml = items.length
+      ? items.map(item => `
+          <div class="shop-order-item">
+            <span>
+              ${escapeShopText(item.product_name || "Product")}
+              ${item.variant_name
+                ? ` (${escapeShopText(item.variant_name)})`
+                : ""}
+              × ${Number(item.quantity || 0)}
+            </span>
+            <strong>₹${Number(item.total || 0).toFixed(2)}</strong>
+          </div>
+        `).join("")
+      : `<div class="shop-order-item">Items unavailable</div>`;
+
+    const customerHtml = `
+      <div class="shop-customer-box">
+        <strong>${escapeShopText(
+          address.recipient_name || "Customer"
+        )}</strong>
+        ${address.phone
+          ? `<div>📞 ${escapeShopText(address.phone)}</div>`
+          : ""}
+        ${address.address_line1
+          ? `<div>📍 ${escapeShopText(address.address_line1)}</div>`
+          : ""}
+        ${address.address_line2
+          ? `<div>${escapeShopText(address.address_line2)}</div>`
+          : ""}
+        ${address.landmark
+          ? `<div>Landmark: ${escapeShopText(address.landmark)}</div>`
+          : ""}
+        <div>
+          ${escapeShopText(address.city || "Modinagar")},
+          ${escapeShopText(address.pincode || "201204")}
+        </div>
+      </div>
+    `;
+
+    let action = "";
+
+    if (status === "pending" || status === "placed") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','confirmed')">
+          Accept Order
+        </button>
+        <button class="danger-btn"
+          onclick="rejectShopOrder('${order.id}')">
+          Reject
+        </button>
+      `;
+    } else if (status === "confirmed") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','packing')">
+          Start Packing
+        </button>
+      `;
+    } else if (status === "packing") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','packed')">
+          Mark Ready
+        </button>
+      `;
+    } else if (status === "packed") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','out_for_delivery')">
+          Send for Delivery
+        </button>
+      `;
+    } else if (status === "out_for_delivery") {
+      action = `
+        <button class="primary-btn"
+          onclick="markShopOrderDelivered('${order.id}')">
+          Mark Delivered
+        </button>
+      `;
+    } else if (status === "delivered") {
+      action = `
+        <span class="shop-complete-label">
+          ✓ Delivered
+        </span>
+      `;
+    } else if (status === "cancelled") {
+      action = `
+        <span class="shop-cancelled-label">
+          Cancelled
+        </span>
+      `;
+    }
+
+    return `
+      <article
+        class="shop-order-card"
+        data-status="${escapeShopText(status)}"
+        data-order-number="${escapeShopText(order.order_number || "")}"
+      >
+
+        <div class="shop-order-top">
+          <div>
+            <div class="shop-order-number">
+              ${escapeShopText(order.order_number || "Order")}
+            </div>
+            <div class="shop-order-date">
+              ${formatShopDate(order.created_at)}
+            </div>
+          </div>
+
+          <span class="shop-order-status status-${escapeShopText(status)}">
+            ${formatShopStatus(status)}
+          </span>
+        </div>
+
+        ${customerHtml}
+
+        <div class="shop-order-items">
+          ${itemHtml}
+        </div>
+
+        <div class="shop-order-total">
+          <span>Total</span>
+          <strong>₹${Number(order.total || 0).toFixed(2)}</strong>
+        </div>
+
+        <div class="shop-order-payment">
+          Payment:
+          <strong>COD</strong>
+        </div>
+
+        <div class="shop-order-actions">
+          ${action}
+        </div>
+      </article>
+    `;
+  }).join("");
+};
+
+
+window.escapeShopText = function(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+
+window.formatShopDate = function(value) {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch (_) {
+    return "";
+  }
+};
+
+
+window.formatShopStatus = function(status) {
+  const map = {
+    pending: "New Order",
+    placed: "New Order",
+    confirmed: "Confirmed",
+    packing: "Packing",
+    packed: "Ready",
+    out_for_delivery: "Out for Delivery",
+    delivered: "Delivered",
+    cancelled: "Cancelled"
+  };
+
+  return map[status] || status;
+};
+
+
+/* ---------------------------------------------------------
+   FINAL SEARCH + STATUS FILTER
+   --------------------------------------------------------- */
+
+window.filterFinalShopOrders = function() {
+  const searchEl =
+    document.getElementById("shopOrderSearch");
+
+  const statusEl =
+    document.getElementById("shopOrderStatusFilter");
+
+  const search = String(
+    searchEl?.value || ""
+  ).trim().toLowerCase();
+
+  const status = String(
+    statusEl?.value || "all"
+  ).toLowerCase();
+
+  document
+    .querySelectorAll(".shop-order-card")
+    .forEach(card => {
+      const number =
+        String(card.dataset.orderNumber || "")
+          .toLowerCase();
+
+      const text =
+        card.textContent.toLowerCase();
+
+      const cardStatus =
+        String(card.dataset.status || "")
+          .toLowerCase();
+
+      const matchesSearch =
+        !search ||
+        number.includes(search) ||
+        text.includes(search);
+
+      const matchesStatus =
+        status === "all" ||
+        cardStatus === status;
+
+      card.style.display =
+        matchesSearch && matchesStatus
+          ? ""
+          : "none";
+    });
+};
+
+
+/* ---------------------------------------------------------
+   FILTER UI
+   --------------------------------------------------------- */
+
+window.addFinalShopOrderFilters = function() {
+  const section =
+    document.getElementById("ordersSection") ||
+    document.getElementById("shopOrdersSection");
+
+  if (!section) return;
+
+  if (document.getElementById("finalShopOrderFilters")) {
+    return;
+  }
+
+  const filters = document.createElement("div");
+  filters.id = "finalShopOrderFilters";
+  filters.className = "shop-order-filters";
+
+  filters.innerHTML = `
+    <input
+      id="shopOrderSearch"
+      type="search"
+      placeholder="Search order or customer..."
+    >
+
+    <select id="shopOrderStatusFilter">
+      <option value="all">All Orders</option>
+      <option value="pending">New</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="packing">Packing</option>
+      <option value="packed">Ready</option>
+      <option value="out_for_delivery">
+        Out for Delivery
+      </option>
+      <option value="delivered">Delivered</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+  `;
+
+  section.prepend(filters);
+
+  document
+    .getElementById("shopOrderSearch")
+    .addEventListener(
+      "input",
+      window.filterFinalShopOrders
+    );
+
+  document
+    .getElementById("shopOrderStatusFilter")
+    .addEventListener(
+      "change",
+      window.filterFinalShopOrders
+    );
+};
+
+
+/* ---------------------------------------------------------
+   SAFE STATUS UPDATE
+   --------------------------------------------------------- */
+
+window.updateShopOrderStatus = async function(
+  orderId,
+  newStatus
+) {
+  try {
+    if (!orderId || !newStatus) return;
+
+    const token =
+      localStorage.getItem("delyvo_shop_token");
+
+    if (!token) {
+      alert("Shop login required.");
+      return;
+    }
+
+    const response = await fetch(
+      `${SHOP_SUPABASE_URL}/rest/v1/rpc/transition_order_status`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SHOP_SUPABASE_KEY,
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          p_order_id: orderId,
+          p_new_status: newStatus
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+        data.hint ||
+        data.details ||
+        "Status update failed."
+      );
+    }
+
+    if (typeof window.loadShopOrders === "function") {
+      await window.loadShopOrders();
+    } else if (typeof window.loadOrders === "function") {
+      await window.loadOrders();
+    } else {
+      location.reload();
+    }
+
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Order status update failed.");
+  }
+};
+
+
+/* ---------------------------------------------------------
+   INITIALIZE
+   --------------------------------------------------------- */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function() {
+    setTimeout(
+      window.addFinalShopOrderFilters,
+      500
+    );
+  }
+);
+
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP - FINAL PRODUCT + STOCK MANAGEMENT
+   ========================================================= */
+
+window.finalShopProducts = [];
+
+window.loadFinalShopProducts = async function () {
+  try {
+    const token = localStorage.getItem("delyvo_shop_token");
+
+    if (!token) {
+      return;
+    }
+
+    const headers = {
+      apikey: SHOP_SUPABASE_KEY,
+      Authorization: `Bearer ${token}`
+    };
+
+    const [productsResponse, variantsResponse, inventoryResponse] =
+      await Promise.all([
+        fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/products?select=id,name,slug,is_active`,
+          { headers }
+        ),
+
+        fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/product_variants?select=id,product_id,name,sku,mrp,selling_price,is_active,quantity_value,quantity_unit&order=name.asc`,
+          { headers }
+        ),
+
+        fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/inventory?select=id,product_id,variant_id,stock_qty,reserved_qty,reorder_level&store_id=eq.7ef989c8-9826-437b-8a63-bb0dfa817540`,
+          { headers }
+        )
+      ]);
+
+    const products = await productsResponse.json();
+    const variants = await variantsResponse.json();
+    const inventory = await inventoryResponse.json();
+
+    if (!productsResponse.ok) {
+      throw new Error("Products load nahi hue.");
+    }
+
+    if (!variantsResponse.ok) {
+      throw new Error("Product variants load nahi hue.");
+    }
+
+    if (!inventoryResponse.ok) {
+      throw new Error("Inventory load nahi hua.");
+    }
+
+    const productMap = {};
+
+    products.forEach(product => {
+      productMap[product.id] = product;
+    });
+
+    const inventoryMap = {};
+
+    inventory.forEach(row => {
+      inventoryMap[row.variant_id] = row;
+    });
+
+    window.finalShopProducts = variants.map(variant => {
+      const product = productMap[variant.product_id] || {};
+      const stock = inventoryMap[variant.id] || {};
+
+      return {
+        id: variant.id,
+        product_id: variant.product_id,
+        name: product.name || "Product",
+        variant_name: variant.name || "",
+        sku: variant.sku || "",
+        mrp: Number(variant.mrp || 0),
+        selling_price: Number(variant.selling_price || 0),
+        is_active: variant.is_active !== false,
+        stock_qty: Number(stock.stock_qty || 0),
+        reserved_qty: Number(stock.reserved_qty || 0),
+        reorder_level: Number(stock.reorder_level || 5),
+        inventory_id: stock.id || null,
+        quantity_value: variant.quantity_value,
+        quantity_unit: variant.quantity_unit
+      };
+    });
+
+    window.renderFinalShopProducts();
+
+  } catch (error) {
+    console.error("PRODUCT LOAD ERROR:", error);
+  }
+};
+
+
+/* ---------------------------------------------------------
+   PRODUCT RENDER
+   --------------------------------------------------------- */
+
+window.renderFinalShopProducts = function () {
+  const section =
+    document.getElementById("productsSection") ||
+    document.getElementById("shopProductsSection");
+
+  if (!section) return;
+
+  let container =
+    document.getElementById("finalShopProductsList");
+
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "finalShopProductsList";
+    section.appendChild(container);
+  }
+
+  if (!window.finalShopProducts.length) {
+    container.innerHTML = `
+      <div class="shop-product-empty">
+        No products found.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML =
+    window.finalShopProducts.map(product => {
+
+      const available =
+        product.stock_qty - product.reserved_qty;
+
+      const lowStock =
+        available <= product.reorder_level;
+
+      const inactive =
+        !product.is_active;
+
+      const statusText =
+        inactive
+          ? "Inactive"
+          : lowStock
+            ? "Low Stock"
+            : "Active";
+
+      const statusClass =
+        inactive
+          ? "inactive"
+          : lowStock
+            ? "low"
+            : "active";
+
+      return `
+        <div
+          class="final-shop-product"
+          data-product-id="${product.id}"
+          data-name="${escapeShopText(
+            product.name + " " + product.variant_name
+          ).toLowerCase()}"
+          data-status="${statusClass}"
+        >
+
+          <div class="final-product-main">
+
+            <div class="final-product-info">
+              <strong>
+                ${escapeShopText(product.name)}
+              </strong>
+
+              ${
+                product.variant_name
+                  ? `<span>
+                      ${escapeShopText(product.variant_name)}
+                    </span>`
+                  : ""
+              }
+
+              ${
+                product.sku
+                  ? `<small>
+                      SKU: ${escapeShopText(product.sku)}
+                    </small>`
+                  : ""
+              }
+            </div>
+
+            <span class="final-product-status ${statusClass}">
+              ${statusText}
+            </span>
+
+          </div>
+
+
+          <div class="final-product-fields">
+
+            <label>
+              MRP
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                data-field="mrp"
+                value="${product.mrp}"
+              >
+            </label>
+
+            <label>
+              Selling Price
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                data-field="selling_price"
+                value="${product.selling_price}"
+              >
+            </label>
+
+            <label>
+              Stock
+              <input
+                type="number"
+                step="1"
+                min="0"
+                data-field="stock_qty"
+                value="${product.stock_qty}"
+              >
+            </label>
+
+          </div>
+
+
+          <div class="final-product-bottom">
+
+            <div>
+              Available:
+              <strong>
+                ${available}
+              </strong>
+
+              ${
+                lowStock
+                  ? `<span class="final-low-stock">
+                      Low stock
+                    </span>`
+                  : ""
+              }
+            </div>
+
+            <div class="final-product-buttons">
+
+              <button
+                class="secondary-btn"
+                onclick="toggleFinalShopProduct('${product.id}')"
+              >
+                ${product.is_active ? "Turn Off" : "Turn On"}
+              </button>
+
+              <button
+                class="primary-btn"
+                onclick="saveFinalShopProduct('${product.id}')"
+              >
+                Save
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      `;
+    }).join("");
+};
+
+
+/* ---------------------------------------------------------
+   SAVE PRODUCT
+   --------------------------------------------------------- */
+
+window.saveFinalShopProduct = async function (variantId) {
+  try {
+    const token =
+      localStorage.getItem("delyvo_shop_token");
+
+    const card =
+      document.querySelector(
+        `.final-shop-product[data-product-id="${variantId}"]`
+      );
+
+    if (!card) return;
+
+    const product =
+      window.finalShopProducts.find(
+        item => item.id === variantId
+      );
+
+    if (!product) return;
+
+    const mrp =
+      Number(
+        card.querySelector(
+          '[data-field="mrp"]'
+        ).value
+      );
+
+    const sellingPrice =
+      Number(
+        card.querySelector(
+          '[data-field="selling_price"]'
+        ).value
+      );
+
+    const stock =
+      Number(
+        card.querySelector(
+          '[data-field="stock_qty"]'
+        ).value
+      );
+
+    if (mrp < 0 || sellingPrice < 0 || stock < 0) {
+      alert("Price aur stock 0 se kam nahi ho sakta.");
+      return;
+    }
+
+    if (sellingPrice > mrp) {
+      alert("Selling price MRP se zyada nahi ho sakta.");
+      return;
+    }
+
+    const headers = {
+      "Content-Type": "application/json",
+      apikey: SHOP_SUPABASE_KEY,
+      Authorization: `Bearer ${token}`,
+      Prefer: "return=minimal"
+    };
+
+    const variantResponse =
+      await fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/product_variants?id=eq.${variantId}`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            mrp: mrp,
+            selling_price: sellingPrice
+          })
+        }
+      );
+
+    if (!variantResponse.ok) {
+      const error = await variantResponse.text();
+      throw new Error(error || "Product price save failed.");
+    }
+
+    if (product.inventory_id) {
+      const inventoryResponse =
+        await fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/inventory?id=eq.${product.inventory_id}`,
+          {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({
+              stock_qty: stock,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+
+      if (!inventoryResponse.ok) {
+        const error = await inventoryResponse.text();
+        throw new Error(
+          error || "Inventory save failed."
+        );
+      }
+    }
+
+    alert("Product updated successfully.");
+
+    await window.loadFinalShopProducts();
+
+    if (typeof window.loadShopDashboard === "function") {
+      await window.loadShopDashboard();
+    }
+
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Product update failed.");
+  }
+};
+
+
+/* ---------------------------------------------------------
+   ACTIVE / INACTIVE
+   --------------------------------------------------------- */
+
+window.toggleFinalShopProduct = async function (variantId) {
+  try {
+    const token =
+      localStorage.getItem("delyvo_shop_token");
+
+    const product =
+      window.finalShopProducts.find(
+        item => item.id === variantId
+      );
+
+    if (!product) return;
+
+    const newState =
+      !product.is_active;
+
+    const response =
+      await fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/product_variants?id=eq.${variantId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SHOP_SUPABASE_KEY,
+            Authorization: `Bearer ${token}`,
+            Prefer: "return=minimal"
+          },
+          body: JSON.stringify({
+            is_active: newState
+          })
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        "Product status update failed."
+      );
+    }
+
+    await window.loadFinalShopProducts();
+
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Product status update failed.");
+  }
+};
+
+
+/* ---------------------------------------------------------
+   SEARCH + FILTER
+   --------------------------------------------------------- */
+
+window.filterFinalShopProducts = function () {
+  const search =
+    String(
+      document.getElementById(
+        "finalShopProductSearch"
+      )?.value || ""
+    ).trim().toLowerCase();
+
+  const filter =
+    String(
+      document.getElementById(
+        "finalShopProductFilter"
+      )?.value || "all"
+    ).toLowerCase();
+
+  document
+    .querySelectorAll(".final-shop-product")
+    .forEach(card => {
+
+      const name =
+        String(
+          card.dataset.name || ""
+        ).toLowerCase();
+
+      const status =
+        String(
+          card.dataset.status || ""
+        ).toLowerCase();
+
+      const matchesSearch =
+        !search ||
+        name.includes(search);
+
+      const matchesFilter =
+        filter === "all" ||
+        status === filter;
+
+      card.style.display =
+        matchesSearch && matchesFilter
+          ? ""
+          : "none";
+    });
+};
+
+
+/* ---------------------------------------------------------
+   FILTER UI
+   --------------------------------------------------------- */
+
+window.addFinalShopProductFilters = function () {
+  const section =
+    document.getElementById("productsSection") ||
+    document.getElementById("shopProductsSection");
+
+  if (!section) return;
+
+  if (
+    document.getElementById(
+      "finalShopProductFilters"
+    )
+  ) {
+    return;
+  }
+
+  const box =
+    document.createElement("div");
+
+  box.id =
+    "finalShopProductFilters";
+
+  box.className =
+    "final-shop-product-filters";
+
+  box.innerHTML = `
+    <input
+      id="finalShopProductSearch"
+      type="search"
+      placeholder="Search product..."
+    >
+
+    <select id="finalShopProductFilter">
+      <option value="all">All Products</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+      <option value="low">Low Stock</option>
+    </select>
+  `;
+
+  section.prepend(box);
+
+  document
+    .getElementById(
+      "finalShopProductSearch"
+    )
+    .addEventListener(
+      "input",
+      window.filterFinalShopProducts
+    );
+
+  document
+    .getElementById(
+      "finalShopProductFilter"
+    )
+    .addEventListener(
+      "change",
+      window.filterFinalShopProducts
+    );
+};
+
+
+/* ---------------------------------------------------------
+   STYLE
+   --------------------------------------------------------- */
+
+if (
+  !document.getElementById(
+    "final-shop-products-css"
+  )
+) {
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "final-shop-products-css";
+
+  style.textContent = `
+    .final-shop-product-filters {
+      display: flex;
+      gap: 10px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+
+    .final-shop-product-filters input,
+    .final-shop-product-filters select {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      min-height: 42px;
+    }
+
+    .final-shop-product {
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: #fff;
+    }
+
+    .final-product-main,
+    .final-product-bottom,
+    .final-product-buttons {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .final-product-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .final-product-info span {
+      color: #666;
+    }
+
+    .final-product-info small {
+      color: #888;
+    }
+
+    .final-product-status {
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .final-product-status.active {
+      background: #e8f7ed;
+      color: #16803c;
+    }
+
+    .final-product-status.low {
+      background: #fff4d6;
+      color: #9a6b00;
+    }
+
+    .final-product-status.inactive {
+      background: #eee;
+      color: #666;
+    }
+
+    .final-product-fields {
+      display: grid;
+      grid-template-columns:
+        repeat(3, minmax(120px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .final-product-fields label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 13px;
+      color: #555;
+    }
+
+    .final-product-fields input {
+      padding: 9px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .final-low-stock {
+      margin-left: 8px;
+      color: #b56d00;
+      font-weight: 700;
+    }
+
+    .shop-product-empty {
+      padding: 30px;
+      text-align: center;
+    }
+
+    @media (max-width: 650px) {
+      .final-product-fields {
+        grid-template-columns: 1fr;
+      }
+
+      .final-product-main,
+      .final-product-bottom {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
+/* ---------------------------------------------------------
+   INITIALIZE
+   --------------------------------------------------------- */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+    setTimeout(function () {
+      window.addFinalShopProductFilters();
+      window.loadFinalShopProducts();
+    }, 700);
+  }
+);
+
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP - FINAL DASHBOARD
+   ========================================================= */
+
+window.loadFinalShopDashboard = async function () {
+  try {
+    const token = localStorage.getItem("delyvo_shop_token");
+
+    if (!token) return;
+
+    const headers = {
+      apikey: SHOP_SUPABASE_KEY,
+      Authorization: `Bearer ${token}`
+    };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayISO = today.toISOString();
+
+    const [
+      ordersResponse,
+      productsResponse,
+      inventoryResponse
+    ] = await Promise.all([
+      fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/orders?select=id,status,total,created_at&created_at=gte.${encodeURIComponent(todayISO)}&order=created_at.desc`,
+        { headers }
+      ),
+
+      fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/product_variants?select=id,is_active`,
+        { headers }
+      ),
+
+      fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/inventory?select=id,stock_qty,reserved_qty,reorder_level&store_id=eq.7ef989c8-9826-437b-8a63-bb0dfa817540`,
+        { headers }
+      )
+    ]);
+
+    const orders = await ordersResponse.json();
+    const products = await productsResponse.json();
+    const inventory = await inventoryResponse.json();
+
+    if (!ordersResponse.ok) {
+      throw new Error("Orders dashboard load failed.");
+    }
+
+    if (!productsResponse.ok) {
+      throw new Error("Products dashboard load failed.");
+    }
+
+    if (!inventoryResponse.ok) {
+      throw new Error("Inventory dashboard load failed.");
+    }
+
+    const safeOrders =
+      Array.isArray(orders) ? orders : [];
+
+    const safeProducts =
+      Array.isArray(products) ? products : [];
+
+    const safeInventory =
+      Array.isArray(inventory) ? inventory : [];
+
+    const totalOrders =
+      safeOrders.length;
+
+    const pendingOrders =
+      safeOrders.filter(order =>
+        ["pending", "placed"].includes(
+          String(order.status || "").toLowerCase()
+        )
+      ).length;
+
+    const preparingOrders =
+      safeOrders.filter(order =>
+        ["confirmed", "packing", "packed"].includes(
+          String(order.status || "").toLowerCase()
+        )
+      ).length;
+
+    const outForDeliveryOrders =
+      safeOrders.filter(order =>
+        String(order.status || "").toLowerCase() ===
+        "out_for_delivery"
+      ).length;
+
+    const deliveredOrders =
+      safeOrders.filter(order =>
+        String(order.status || "").toLowerCase() ===
+        "delivered"
+      ).length;
+
+    const todaySales =
+      safeOrders
+        .filter(order =>
+          String(order.status || "").toLowerCase() !==
+          "cancelled"
+        )
+        .reduce(
+          (sum, order) =>
+            sum + Number(order.total || 0),
+          0
+        );
+
+    const lowStock =
+      safeInventory.filter(item => {
+        const available =
+          Number(item.stock_qty || 0) -
+          Number(item.reserved_qty || 0);
+
+        return available <=
+          Number(item.reorder_level || 5);
+      }).length;
+
+    const activeProducts =
+      safeProducts.filter(
+        product => product.is_active !== false
+      ).length;
+
+    const setValue = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setValue("finalDashOrders", totalOrders);
+    setValue("finalDashPending", pendingOrders);
+    setValue("finalDashPreparing", preparingOrders);
+    setValue("finalDashDelivery", outForDeliveryOrders);
+    setValue(
+      "finalDashSales",
+      `₹${todaySales.toFixed(2)}`
+    );
+    setValue("finalDashLowStock", lowStock);
+    setValue("finalDashProducts", activeProducts);
+    setValue(
+      "finalDashDelivered",
+      deliveredOrders
+    );
+
+    const updated =
+      document.getElementById(
+        "finalDashUpdated"
+      );
+
+    if (updated) {
+      updated.textContent =
+        `Updated ${new Date().toLocaleTimeString(
+          "en-IN",
+          {
+            hour: "2-digit",
+            minute: "2-digit"
+          }
+        )}`;
+    }
+
+  } catch (error) {
+    console.error(
+      "FINAL DASHBOARD ERROR:",
+      error
+    );
+  }
+};
+
+
+/* ---------------------------------------------------------
+   DASHBOARD UI
+   --------------------------------------------------------- */
+
+window.addFinalShopDashboard = function () {
+
+  if (
+    document.getElementById(
+      "finalShopDashboard"
+    )
+  ) {
+    return;
+  }
+
+  const dashboard =
+    document.createElement("section");
+
+  dashboard.id =
+    "finalShopDashboard";
+
+  dashboard.className =
+    "final-shop-dashboard";
+
+  dashboard.innerHTML = `
+    <div class="final-dashboard-header">
+
+      <div>
+        <h2>Shop Dashboard</h2>
+        <p>Delyvo Modinagar Store</p>
+      </div>
+
+      <div class="final-dashboard-actions">
+
+        <span id="finalDashUpdated">
+          Loading...
+        </span>
+
+        <button
+          class="secondary-btn"
+          onclick="loadFinalShopDashboard()"
+        >
+          Refresh
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <div class="final-dashboard-grid">
+
+      <div class="final-dashboard-card">
+        <span>Today's Orders</span>
+        <strong id="finalDashOrders">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Pending</span>
+        <strong id="finalDashPending">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Preparing</span>
+        <strong id="finalDashPreparing">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Out for Delivery</span>
+        <strong id="finalDashDelivery">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Delivered</span>
+        <strong id="finalDashDelivered">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Today's Sales</span>
+        <strong id="finalDashSales">₹0.00</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Low Stock</span>
+        <strong id="finalDashLowStock">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Active Products</span>
+        <strong id="finalDashProducts">0</strong>
+      </div>
+
+    </div>
+
+
+    <div class="final-dashboard-note">
+      Orders automatically refresh every 30 seconds.
+    </div>
+  `;
+
+  const firstBodyChild =
+    document.body.firstElementChild;
+
+  if (firstBodyChild) {
+    document.body.insertBefore(
+      dashboard,
+      firstBodyChild
+    );
+  } else {
+    document.body.appendChild(
+      dashboard
+    );
+  }
+};
+
+
+/* ---------------------------------------------------------
+   AUTO REFRESH
+   --------------------------------------------------------- */
+
+window.finalShopDashboardInterval =
+  window.finalShopDashboardInterval ||
+  setInterval(function () {
+
+    if (
+      typeof window.loadFinalShopDashboard ===
+      "function"
+    ) {
+      window.loadFinalShopDashboard();
+    }
+
+    if (
+      typeof window.loadFinalShopProducts ===
+      "function"
+    ) {
+      window.loadFinalShopProducts();
+    }
+
+    if (
+      typeof window.loadShopOrders ===
+      "function"
+    ) {
+      window.loadShopOrders();
+    } else if (
+      typeof window.loadOrders ===
+      "function"
+    ) {
+      window.loadOrders();
+    }
+
+  }, 30000);
+
+
+/* ---------------------------------------------------------
+   STYLE
+   --------------------------------------------------------- */
+
+if (
+  !document.getElementById(
+    "final-shop-dashboard-css"
+  )
+) {
+
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "final-shop-dashboard-css";
+
+  style.textContent = `
+    .final-shop-dashboard {
+      margin: 20px auto;
+      max-width: 1200px;
+      padding: 0 16px;
+    }
+
+    .final-dashboard-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .final-dashboard-header h2 {
+      margin: 0 0 4px;
+    }
+
+    .final-dashboard-header p {
+      margin: 0;
+      color: #777;
+    }
+
+    .final-dashboard-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #finalDashUpdated {
+      color: #777;
+      font-size: 13px;
+    }
+
+    .final-dashboard-grid {
+      display: grid;
+      grid-template-columns:
+        repeat(4, minmax(150px, 1fr));
+      gap: 14px;
+    }
+
+    .final-dashboard-card {
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      padding: 18px;
+      background: #fff;
+      min-height: 90px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .final-dashboard-card span {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .final-dashboard-card strong {
+      font-size: 27px;
+    }
+
+    .final-dashboard-note {
+      margin-top: 14px;
+      color: #777;
+      font-size: 13px;
+    }
+
+    @media (max-width: 800px) {
+      .final-dashboard-grid {
+        grid-template-columns:
+          repeat(2, minmax(140px, 1fr));
+      }
+
+      .final-dashboard-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .final-dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
+/* ---------------------------------------------------------
+   INITIALIZE
+   --------------------------------------------------------- */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+
+    setTimeout(function () {
+
+      window.addFinalShopDashboard();
+
+      window.loadFinalShopDashboard();
+
+    }, 900);
+
+  }
+);
+
+</script>
+
+
+</body>
+</html>

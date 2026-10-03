@@ -1,0 +1,7333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delyvo Shop Panel</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#171717}
+header{background:#111;color:white;padding:18px 20px;display:flex;justify-content:space-between;align-items:center}
+main{max-width:1100px;margin:20px auto;padding:0 15px}
+.card{background:white;border-radius:12px;padding:18px;margin-bottom:15px;box-shadow:0 2px 10px #00000012}
+input,button,select{padding:11px;border-radius:8px;border:1px solid #ddd;font-size:15px}
+input{width:100%;margin-bottom:10px}
+button{cursor:pointer}
+.primary{background:#111;color:white;border:0}
+.order{border:1px solid #eee;border-radius:10px;padding:15px;margin-top:12px}
+.row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.status{font-weight:bold}
+.items{margin:10px 0;padding-left:18px}
+.error{color:#b00020}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <b>DELYVO</b>
+    <div>Grocery Shop Panel</div>
+  </div>
+  <button id="logoutBtn">Logout</button>
+</header>
+
+<main>
+
+<div id="loginBox" class="card">
+  <h2>Shop Login</h2>
+  <input id="email" type="email" placeholder="Staff email">
+  <input id="password" type="password" placeholder="Password">
+  <button id="login" class="primary">Login</button>
+  <p id="loginMsg"></p>
+</div>
+
+<div id="shopBox" style="display:none">
+  <div class="card">
+    <div class="row">
+      <div>
+        <h2 style="margin:0">Orders</h2>
+        <small>Modinagar Store · 201204</small>
+      </div>
+      <button id="refresh" class="primary">Refresh</button>
+    </div>
+  </div>
+
+  <div id="orders"></div>
+</div>
+
+</main>
+
+<script>
+const SUPABASE_URL="https://unwdkreujyejgcucgttj.supabase.co";
+const SUPABASE_KEY="sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+function token(){
+  return localStorage.getItem("delyvo_shop_token");
+}
+
+async function login(){
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  const msg=document.getElementById("loginMsg");
+
+  msg.textContent="Login ho raha hai...";
+
+  const r=await fetch(
+    SUPABASE_URL+"/auth/v1/token?grant_type=password",
+    {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        apikey:SUPABASE_KEY
+      },
+      body:JSON.stringify({email,password})
+    }
+  );
+
+  const d=await r.json();
+
+  if(!r.ok){
+    msg.className="error";
+    msg.textContent=d.msg||d.message||"Login failed";
+    return;
+  }
+
+  localStorage.setItem("delyvo_shop_token",d.access_token);
+  localStorage.setItem("delyvo_shop_refresh",d.refresh_token);
+
+  await loadShop();
+}
+
+async function api(path,options={}){
+  const headers={
+    apikey:SUPABASE_KEY,
+    Authorization:"Bearer "+token(),
+    ...options.headers
+  };
+
+  return fetch(SUPABASE_URL+path,{...options,headers});
+}
+
+window.loadShopOrders = async function() {
+  const tokenValue =
+    localStorage.getItem("delyvo_shop_token") || "";
+
+  if (!tokenValue) {
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("shopBox").style.display = "none";
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      SUPABASE_URL +
+      "/rest/v1/orders" +
+      "?select=id,order_number,status,payment_status,subtotal,delivery_fee,total,created_at,address_id," +
+      "order_items(id,product_name,variant_name,quantity,unit_price,total)," +
+      "addresses(recipient_name,phone,address_line1,address_line2,landmark,city,state,pincode)" +
+      "&order=created_at.desc",
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + tokenValue
+        }
+      }
+    );
+
+    const data = await response.json().catch(() => []);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.hint ||
+        data?.details ||
+        "Orders load nahi ho paye."
+      );
+    }
+
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("shopBox").style.display = "block";
+
+    const orders = Array.isArray(data) ? data : [];
+
+    window.delyvoShopOrders = orders;
+    window.shopOrders = orders;
+
+    window.renderFinalShopOrders(orders);
+
+    if (typeof window.addFinalShopOrderFilters === "function") {
+      window.addFinalShopOrderFilters();
+    }
+
+    if (typeof window.filterFinalShopOrders === "function") {
+      window.filterFinalShopOrders();
+    }
+
+    return orders;
+
+  } catch (error) {
+    console.error("DELYVO SHOP ORDERS ERROR:", error);
+
+    const msg = document.getElementById("loginMsg");
+
+    if (msg) {
+      msg.className = "error";
+      msg.textContent =
+        error?.message ||
+        "Orders load nahi ho paye.";
+    }
+
+    return [];
+  }
+};
+
+
+async function loadShop() {
+  return await window.loadShopOrders();
+}
+
+
+document.getElementById("login").onclick=login;
+document.getElementById("refresh").onclick=loadShop;
+
+document.getElementById("logoutBtn").onclick=()=>{
+  localStorage.removeItem("delyvo_shop_token");
+  localStorage.removeItem("delyvo_shop_refresh");
+  location.reload();
+};
+
+if(token()) loadShop();
+</script>
+
+
+
+
+
+<script>
+(() => {
+  const URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+  const STORE_ID = "7ef989c8-9826-437b-8a63-bb0dfa817540";
+
+  function token() {
+    return localStorage.getItem("delyvo_shop_token") || "";
+  }
+
+  async function api(path, options = {}) {
+    const headers = {
+      apikey: KEY,
+      Authorization: "Bearer " + token(),
+  async function orderApi(path, options = {}) {
+    const r = await fetch(URL + path, {
+      ...options,
+      headers: {
+        apikey: KEY,
+        Authorization: "Bearer " + shopToken(),
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        data?.error ||
+        "Order request failed"
+      );
+    }
+
+    return data;
+  }
+
+})();
+</script>
+
+
+<script>
+(() => {
+  const DLV_SUPABASE_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_SUPABASE_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function shopToken() {
+    return localStorage.getItem("delyvo_shop_token") || "";
+  }
+
+  async function shopRequest(path, options = {}) {
+    const response = await fetch(
+      DLV_SUPABASE_URL + path,
+      {
+        ...options,
+        headers: {
+          apikey: DLV_SUPABASE_KEY,
+          Authorization: "Bearer " + shopToken(),
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        }
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+        data?.msg ||
+        data?.hint ||
+        "Shop request failed"
+      );
+    }
+
+    return data;
+  }
+
+  async function markShopOrderDelivered(orderId) {
+    if (!orderId) return;
+
+    if (!shopToken()) {
+      alert("Shop login required.");
+      return;
+    }
+
+    try {
+      const deliveries = await shopRequest(
+        "/rest/v1/deliveries" +
+        "?select=id,status,order_id" +
+        "&order_id=eq." + encodeURIComponent(orderId) +
+        "&limit=1"
+      );
+
+      if (!deliveries || !deliveries.length) {
+        throw new Error(
+          "Delivery record nahi mila. Pehle order ko Out for Delivery karo."
+        );
+      }
+
+      const delivery = deliveries[0];
+
+      await shopRequest(
+        "/rest/v1/deliveries?id=eq." +
+        encodeURIComponent(delivery.id),
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: "delivered",
+            delivered_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+
+      await shopRequest(
+        "/rest/v1/rpc/transition_order_status",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            p_order_id: orderId,
+            p_new_status: "delivered"
+          })
+        }
+      );
+
+      alert("Order delivered successfully.");
+
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      } else if (typeof window.loadOrders === "function") {
+        await window.loadOrders();
+      } else {
+        location.reload();
+      }
+
+    } catch (error) {
+      alert(error.message || "Order delivery update failed.");
+    }
+  }
+
+  window.markShopOrderDelivered = markShopOrderDelivered;
+})();
+</script>
+
+
+<script>
+(() => {
+  const DLV_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+  const DLV_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function shopToken() {
+    return localStorage.getItem("delyvo_shop_token") || "";
+  }
+
+  async function rejectShopOrder(orderId) {
+    if (!orderId) return;
+
+    if (!shopToken()) {
+      alert("Shop login required.");
+      return;
+    }
+
+    const ok = confirm(
+      "Kya aap is order ko reject/cancel karna chahte ho?"
+    );
+
+    if (!ok) return;
+
+    try {
+      const response = await fetch(
+        DLV_URL + "/rest/v1/rpc/transition_order_status",
+        {
+          method: "POST",
+          headers: {
+            apikey: DLV_KEY,
+            Authorization: "Bearer " + shopToken(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            p_order_id: orderId,
+            p_new_status: "cancelled"
+          })
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+          data?.msg ||
+          data?.hint ||
+          "Order reject failed"
+        );
+      }
+
+      alert("Order rejected successfully.");
+
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      } else if (typeof window.loadOrders === "function") {
+        await window.loadOrders();
+      } else {
+        location.reload();
+      }
+
+    } catch (error) {
+      alert(error.message || "Order reject failed.");
+    }
+  }
+
+  window.rejectShopOrder = rejectShopOrder;
+})();
+</script>
+
+
+<script>
+(() => {
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .shop-order-card {
+      background:#fff;
+      border:1px solid #e5e5e5;
+      border-radius:16px;
+      padding:16px;
+      margin-bottom:14px;
+      box-shadow:0 3px 12px rgba(0,0,0,.05);
+    }
+
+    .shop-order-top {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .shop-order-number {
+      font-weight:800;
+      font-size:16px;
+    }
+
+    .shop-order-date {
+      color:#777;
+      font-size:12px;
+      margin-top:3px;
+    }
+
+    .shop-order-status {
+      padding:6px 9px;
+      border-radius:8px;
+      background:#f1f1f1;
+      font-size:11px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .shop-customer-box {
+      background:#f8f8f8;
+      border-radius:11px;
+      padding:11px;
+      margin-bottom:12px;
+    }
+
+    .shop-customer-box strong {
+      display:block;
+      margin-bottom:4px;
+    }
+
+    .shop-customer-box span {
+      display:block;
+      color:#666;
+      font-size:13px;
+      margin-top:2px;
+    }
+
+    .shop-order-items {
+      border-top:1px solid #eee;
+      border-bottom:1px solid #eee;
+      padding:10px 0;
+      margin-bottom:12px;
+    }
+
+    .shop-order-item {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      padding:5px 0;
+      font-size:13px;
+    }
+
+    .shop-order-total {
+      display:flex;
+      justify-content:space-between;
+      font-size:17px;
+      font-weight:800;
+      margin-bottom:12px;
+    }
+
+    .shop-order-actions {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+
+    .shop-order-actions button {
+      padding:9px 12px;
+      border:1px solid #ddd;
+      border-radius:9px;
+      background:#fff;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .shop-order-actions button:hover {
+      background:#f5f5f5;
+    }
+
+    .shop-order-actions .danger {
+      color:#b00020;
+    }
+
+    .shop-order-empty {
+      padding:30px 15px;
+      text-align:center;
+      color:#777;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  function addOrderFilters() {
+    const section =
+      document.querySelector("#ordersSection") ||
+      document.querySelector(".orders-section");
+
+    if (!section) return;
+
+    if (document.getElementById("shopOrderFilters")) return;
+
+    const box = document.createElement("div");
+    box.id = "shopOrderFilters";
+
+    box.innerHTML = `
+      <div class="sof-row">
+        <input
+          id="shopOrderSearch"
+          type="search"
+          placeholder="Search order number or customer..."
+        >
+
+        <select id="shopOrderStatusFilter">
+          <option value="all">All Orders</option>
+          <option value="placed">New</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="packing">Packing</option>
+          <option value="packed">Ready</option>
+          <option value="out_for_delivery">Out for Delivery</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+    `;
+
+    section.prepend(box);
+
+    document
+      .getElementById("shopOrderSearch")
+      .addEventListener("input", filterShopOrders);
+
+    document
+      .getElementById("shopOrderStatusFilter")
+      .addEventListener("change", filterShopOrders);
+  }
+
+  function filterShopOrders() {
+    const search =
+      (
+        document.getElementById("shopOrderSearch")?.value ||
+        ""
+      ).toLowerCase().trim();
+
+    const status =
+      document.getElementById("shopOrderStatusFilter")?.value ||
+      "all";
+
+    document.querySelectorAll(".shop-order-card").forEach(card => {
+      const text = card.textContent.toLowerCase();
+
+      const matchesSearch =
+        !search || text.includes(search);
+
+      const cardStatus =
+        card.dataset.status || "";
+
+      const matchesStatus =
+        status === "all" ||
+        cardStatus === status;
+
+      card.style.display =
+        matchesSearch && matchesStatus
+          ? ""
+          : "none";
+    });
+  }
+
+  window.addShopOrderFilters = addOrderFilters;
+
+  window.addEventListener("load", () => {
+    setTimeout(addOrderFilters, 400);
+  });
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #shopOrderFilters {
+      margin:12px 0 18px;
+    }
+
+    .sof-row {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    #shopOrderSearch,
+    #shopOrderStatusFilter {
+      box-sizing:border-box;
+      min-height:42px;
+      padding:9px 12px;
+      border:1px solid #ddd;
+      border-radius:10px;
+      background:#fff;
+      font-size:14px;
+    }
+
+    #shopOrderSearch {
+      flex:1;
+      min-width:220px;
+    }
+
+    #shopOrderStatusFilter {
+      min-width:170px;
+    }
+
+    @media(max-width:600px) {
+      #shopOrderSearch,
+      #shopOrderStatusFilter {
+        width:100%;
+        min-width:0;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  function addProductFilters() {
+    if (document.getElementById("shopProductFilters")) return;
+
+    const productSection =
+      document.querySelector("#productsSection") ||
+      document.querySelector(".products-section");
+
+    if (!productSection) return;
+
+    const box = document.createElement("div");
+    box.id = "shopProductFilters";
+
+    box.innerHTML = `
+      <div class="spf-row">
+        <input
+          id="shopProductSearch"
+          type="search"
+          placeholder="Search product..."
+        >
+
+        <select id="shopProductStatus">
+          <option value="all">All Products</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="low">Low Stock</option>
+        </select>
+      </div>
+    `;
+
+    productSection.prepend(box);
+
+    document
+      .getElementById("shopProductSearch")
+      .addEventListener("input", filterShopProducts);
+
+    document
+      .getElementById("shopProductStatus")
+      .addEventListener("change", filterShopProducts);
+  }
+
+  function filterShopProducts() {
+    const search =
+      (
+        document.getElementById("shopProductSearch")?.value ||
+        ""
+      ).toLowerCase().trim();
+
+    const status =
+      document.getElementById("shopProductStatus")?.value ||
+      "all";
+
+    document.querySelectorAll(
+      "#productsSection tbody tr, .products-section tbody tr"
+    ).forEach(row => {
+      const text = row.textContent.toLowerCase();
+
+      const matchesSearch =
+        !search || text.includes(search);
+
+      const activeButton =
+        row.querySelector(
+          ".product-active-toggle, .variant-active-toggle"
+        );
+
+      const isActive =
+        activeButton?.dataset.active !== "false";
+
+      const stockText =
+        row.querySelector(
+          ".stock-input, input[name*='stock'], input[type='number']"
+        )?.value;
+
+      const stock =
+        Number(stockText || 0);
+
+      let matchesStatus = true;
+
+      if (status === "active") {
+        matchesStatus = isActive;
+      }
+
+      if (status === "inactive") {
+        matchesStatus = !isActive;
+      }
+
+      if (status === "low") {
+        matchesStatus = stock <= 5;
+      }
+
+      row.style.display =
+        matchesSearch && matchesStatus
+          ? ""
+          : "none";
+    });
+  }
+
+  window.addShopProductFilters = addProductFilters;
+
+  window.addEventListener("load", () => {
+    setTimeout(addProductFilters, 500);
+  });
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #shopProductFilters {
+      margin:12px 0 18px;
+    }
+
+    .spf-row {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    #shopProductSearch,
+    #shopProductStatus {
+      min-height:42px;
+      padding:9px 12px;
+      border:1px solid #ddd;
+      border-radius:10px;
+      background:#fff;
+      font-size:14px;
+      box-sizing:border-box;
+    }
+
+    #shopProductSearch {
+      flex:1;
+      min-width:220px;
+    }
+
+    #shopProductStatus {
+      min-width:170px;
+    }
+
+    @media(max-width:600px) {
+      #shopProductSearch,
+      #shopProductStatus {
+        width:100%;
+        min-width:0;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+</script>
+
+
+<script>
+(() => {
+  let shopRefreshTimer = null;
+
+  function startShopAutoRefresh() {
+    if (shopRefreshTimer) {
+      clearInterval(shopRefreshTimer);
+    }
+
+    shopRefreshTimer = setInterval(async () => {
+      if (!localStorage.getItem("delyvo_shop_token")) {
+        return;
+      }
+
+      try {
+        if (typeof window.loadShopOrders === "function") {
+          await window.loadShopOrders();
+        } else if (typeof window.loadOrders === "function") {
+          await window.loadOrders();
+        }
+
+        if (typeof window.loadFinalShopDashboard === "function") {
+          await window.loadFinalShopDashboard();
+        }
+      } catch (error) {
+        console.log("Shop auto refresh:", error.message);
+      }
+    }, 30000);
+  }
+
+  window.startShopAutoRefresh = startShopAutoRefresh;
+
+  window.addEventListener("load", () => {
+    setTimeout(startShopAutoRefresh, 1500);
+  });
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .shop-refresh-info {
+      margin:8px 0 14px;
+      padding:8px 11px;
+      border-radius:8px;
+      background:#f5f5f5;
+      color:#666;
+      font-size:12px;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  const info = document.createElement("div");
+  info.className = "shop-refresh-info";
+  info.textContent = "Orders automatically refresh every 30 seconds.";
+
+  const ordersSection =
+    document.querySelector("#ordersSection") ||
+    document.querySelector(".orders-section");
+
+  if (ordersSection) {
+    ordersSection.prepend(info);
+  }
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP PANEL - FINAL ORDER MANAGEMENT
+   ========================================================= */
+
+window.renderFinalShopOrders = function(orders) {
+  const container =
+    document.getElementById("shopOrdersList") ||
+    document.getElementById("ordersList") ||
+    document.getElementById("shop-orders-list");
+
+  if (!container) return;
+
+  if (!Array.isArray(orders) || !orders.length) {
+    container.innerHTML = `
+      <div class="shop-order-empty">
+        <h3>No Orders</h3>
+        <p>Abhi koi customer order nahi hai.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = orders.map(order => {
+    const status = String(order.status || "pending").toLowerCase();
+
+    const address = order.addresses || order.address || {};
+    const items = Array.isArray(order.order_items)
+      ? order.order_items
+      : [];
+
+    const itemHtml = items.length
+      ? items.map(item => `
+          <div class="shop-order-item">
+            <span>
+              ${escapeShopText(item.product_name || "Product")}
+              ${item.variant_name
+                ? ` (${escapeShopText(item.variant_name)})`
+                : ""}
+              × ${Number(item.quantity || 0)}
+            </span>
+            <strong>₹${Number(item.total || 0).toFixed(2)}</strong>
+          </div>
+        `).join("")
+      : `<div class="shop-order-item">Items unavailable</div>`;
+
+    const customerHtml = `
+      <div class="shop-customer-box">
+        <strong>${escapeShopText(
+          address.recipient_name || "Customer"
+        )}</strong>
+        ${address.phone
+          ? `<div>📞 ${escapeShopText(address.phone)}</div>`
+          : ""}
+        ${address.address_line1
+          ? `<div>📍 ${escapeShopText(address.address_line1)}</div>`
+          : ""}
+        ${address.address_line2
+          ? `<div>${escapeShopText(address.address_line2)}</div>`
+          : ""}
+        ${address.landmark
+          ? `<div>Landmark: ${escapeShopText(address.landmark)}</div>`
+          : ""}
+        <div>
+          ${escapeShopText(address.city || "Modinagar")},
+          ${escapeShopText(address.pincode || "201204")}
+        </div>
+      </div>
+    `;
+
+    let action = "";
+
+    if (status === "pending" || status === "placed") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','confirmed')">
+          Accept Order
+        </button>
+        <button class="danger-btn"
+          onclick="rejectShopOrder('${order.id}')">
+          Reject
+        </button>
+      `;
+    } else if (status === "confirmed") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','packing')">
+          Start Packing
+        </button>
+      `;
+    } else if (status === "packing") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','packed')">
+          Mark Ready
+        </button>
+      `;
+    } else if (status === "packed") {
+      action = `
+        <button class="primary-btn"
+          onclick="updateShopOrderStatus('${order.id}','out_for_delivery')">
+          Send for Delivery
+        </button>
+      `;
+    } else if (status === "out_for_delivery") {
+      action = `
+        <button class="primary-btn"
+          onclick="markShopOrderDelivered('${order.id}')">
+          Mark Delivered
+        </button>
+      `;
+    } else if (status === "delivered") {
+      action = `
+        <span class="shop-complete-label">
+          ✓ Delivered
+        </span>
+      `;
+    } else if (status === "cancelled") {
+      action = `
+        <span class="shop-cancelled-label">
+          Cancelled
+        </span>
+      `;
+    }
+
+    return `
+      <article
+        class="shop-order-card"
+        data-status="${escapeShopText(status)}"
+        data-order-number="${escapeShopText(order.order_number || "")}"
+      >
+
+        <div class="shop-order-top">
+          <div>
+            <div class="shop-order-number">
+              ${escapeShopText(order.order_number || "Order")}
+            </div>
+            <div class="shop-order-date">
+              ${formatShopDate(order.created_at)}
+            </div>
+          </div>
+
+          <span class="shop-order-status status-${escapeShopText(status)}">
+            ${formatShopStatus(status)}
+          </span>
+        </div>
+
+        ${customerHtml}
+
+        <div class="shop-order-items">
+          ${itemHtml}
+        </div>
+
+        <div class="shop-order-total">
+          <span>Total</span>
+          <strong>₹${Number(order.total || 0).toFixed(2)}</strong>
+        </div>
+
+        <div class="shop-order-payment">
+          Payment:
+          <strong>COD</strong>
+        </div>
+
+        <div class="shop-order-actions">
+          <button
+            class="shop-details-btn"
+            type="button"
+            onclick="openShopOrderDetails('${order.id}')">
+            View Order Details
+          </button>
+          ${action}
+        </div>
+      </article>
+    `;
+  }).join("");
+};
+
+
+window.escapeShopText = function(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+
+window.formatShopDate = function(value) {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch (_) {
+    return "";
+  }
+};
+
+
+window.formatShopStatus = function(status) {
+  const map = {
+    pending: "New Order",
+    placed: "New Order",
+    confirmed: "Confirmed",
+    packing: "Packing",
+    packed: "Ready",
+    out_for_delivery: "Out for Delivery",
+    delivered: "Delivered",
+    cancelled: "Cancelled"
+  };
+
+  return map[status] || status;
+};
+
+
+/* ---------------------------------------------------------
+   FINAL SEARCH + STATUS FILTER
+   --------------------------------------------------------- */
+
+window.filterFinalShopOrders = function() {
+  const searchEl =
+    document.getElementById("shopOrderSearch");
+
+  const statusEl =
+    document.getElementById("shopOrderStatusFilter");
+
+  const search = String(
+    searchEl?.value || ""
+  ).trim().toLowerCase();
+
+  const status = String(
+    statusEl?.value || "all"
+  ).toLowerCase();
+
+  document
+    .querySelectorAll(".shop-order-card")
+    .forEach(card => {
+      const number =
+        String(card.dataset.orderNumber || "")
+          .toLowerCase();
+
+      const text =
+        card.textContent.toLowerCase();
+
+      const cardStatus =
+        String(card.dataset.status || "")
+          .toLowerCase();
+
+      const matchesSearch =
+        !search ||
+        number.includes(search) ||
+        text.includes(search);
+
+      const matchesStatus =
+        status === "all" ||
+        cardStatus === status;
+
+      card.style.display =
+        matchesSearch && matchesStatus
+          ? ""
+          : "none";
+    });
+};
+
+
+/* ---------------------------------------------------------
+   FILTER UI
+   --------------------------------------------------------- */
+
+window.addFinalShopOrderFilters = function() {
+  const section =
+    document.getElementById("ordersSection") ||
+    document.getElementById("shopOrdersSection");
+
+  if (!section) return;
+
+  if (document.getElementById("finalShopOrderFilters")) {
+    return;
+  }
+
+  const filters = document.createElement("div");
+  filters.id = "finalShopOrderFilters";
+  filters.className = "shop-order-filters";
+
+  filters.innerHTML = `
+    <input
+      id="shopOrderSearch"
+      type="search"
+      placeholder="Search order or customer..."
+    >
+
+    <select id="shopOrderStatusFilter">
+      <option value="all">All Orders</option>
+      <option value="pending">New</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="packing">Packing</option>
+      <option value="packed">Ready</option>
+      <option value="out_for_delivery">
+        Out for Delivery
+      </option>
+      <option value="delivered">Delivered</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+  `;
+
+  section.prepend(filters);
+
+  document
+    .getElementById("shopOrderSearch")
+    .addEventListener(
+      "input",
+      window.filterFinalShopOrders
+    );
+
+  document
+    .getElementById("shopOrderStatusFilter")
+    .addEventListener(
+      "change",
+      window.filterFinalShopOrders
+    );
+};
+
+
+/* ---------------------------------------------------------
+   SAFE STATUS UPDATE
+   --------------------------------------------------------- */
+
+window.updateShopOrderStatus = async function(
+  orderId,
+  newStatus
+) {
+  try {
+    if (!orderId || !newStatus) return;
+
+    const token =
+      localStorage.getItem("delyvo_shop_token");
+
+    if (!token) {
+      alert("Shop login required.");
+      return;
+    }
+
+    const response = await fetch(
+      `${SHOP_SUPABASE_URL}/rest/v1/rpc/transition_order_status`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SHOP_SUPABASE_KEY,
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          p_order_id: orderId,
+          p_new_status: newStatus
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+        data.hint ||
+        data.details ||
+        "Status update failed."
+      );
+    }
+
+    if (typeof window.loadShopOrders === "function") {
+      await window.loadShopOrders();
+    } else if (typeof window.loadOrders === "function") {
+      await window.loadOrders();
+    } else {
+      location.reload();
+    }
+
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Order status update failed.");
+  }
+};
+
+
+/* ---------------------------------------------------------
+   INITIALIZE
+   --------------------------------------------------------- */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function() {
+    setTimeout(
+      window.addFinalShopOrderFilters,
+      500
+    );
+  }
+);
+
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP - FINAL PRODUCT + STOCK MANAGEMENT
+   ========================================================= */
+
+window.finalShopProducts = [];
+
+window.loadFinalShopProducts = async function () {
+  try {
+    const token = localStorage.getItem("delyvo_shop_token");
+
+    if (!token) {
+      return;
+    }
+
+    const headers = {
+      apikey: SHOP_SUPABASE_KEY,
+      Authorization: `Bearer ${token}`
+    };
+
+    const [productsResponse, variantsResponse, inventoryResponse] =
+      await Promise.all([
+        fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/products?select=id,name,slug,is_active`,
+          { headers }
+        ),
+
+        fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/product_variants?select=id,product_id,name,sku,mrp,selling_price,is_active,quantity_value,quantity_unit&order=name.asc`,
+          { headers }
+        ),
+
+        fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/inventory?select=id,product_id,variant_id,stock_qty,reserved_qty,reorder_level&store_id=eq.7ef989c8-9826-437b-8a63-bb0dfa817540`,
+          { headers }
+        )
+      ]);
+
+    const products = await productsResponse.json();
+    const variants = await variantsResponse.json();
+    const inventory = await inventoryResponse.json();
+
+    if (!productsResponse.ok) {
+      throw new Error("Products load nahi hue.");
+    }
+
+    if (!variantsResponse.ok) {
+      throw new Error("Product variants load nahi hue.");
+    }
+
+    if (!inventoryResponse.ok) {
+      throw new Error("Inventory load nahi hua.");
+    }
+
+    const productMap = {};
+
+    products.forEach(product => {
+      productMap[product.id] = product;
+    });
+
+    const inventoryMap = {};
+
+    inventory.forEach(row => {
+      inventoryMap[row.variant_id] = row;
+    });
+
+    window.finalShopProducts = variants.map(variant => {
+      const product = productMap[variant.product_id] || {};
+      const stock = inventoryMap[variant.id] || {};
+
+      return {
+        id: variant.id,
+        product_id: variant.product_id,
+        name: product.name || "Product",
+        variant_name: variant.name || "",
+        sku: variant.sku || "",
+        mrp: Number(variant.mrp || 0),
+        selling_price: Number(variant.selling_price || 0),
+        is_active: variant.is_active !== false,
+        stock_qty: Number(stock.stock_qty || 0),
+        reserved_qty: Number(stock.reserved_qty || 0),
+        reorder_level: Number(stock.reorder_level || 5),
+        inventory_id: stock.id || null,
+        quantity_value: variant.quantity_value,
+        quantity_unit: variant.quantity_unit
+      };
+    });
+
+    window.renderFinalShopProducts();
+
+  } catch (error) {
+    console.error("PRODUCT LOAD ERROR:", error);
+  }
+};
+
+
+/* ---------------------------------------------------------
+   PRODUCT RENDER
+   --------------------------------------------------------- */
+
+window.renderFinalShopProducts = function () {
+  const section =
+    document.getElementById("productsSection") ||
+    document.getElementById("shopProductsSection");
+
+  if (!section) return;
+
+  /* DELYVO SHOP PRODUCT MANAGEMENT UI V2 */
+  if (!document.getElementById("delyvoProductTools")) {
+    const tools = document.createElement("div");
+    tools.id = "delyvoProductTools";
+
+    tools.innerHTML = `
+      <div class="delyvo-product-tools">
+        <div class="delyvo-product-search">
+          <input
+            id="delyvoProductSearch"
+            type="search"
+            placeholder="Search product or SKU..."
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="delyvo-product-filters">
+          <button
+            type="button"
+            class="delyvo-product-filter active"
+            data-product-filter="all">
+            All
+          </button>
+
+          <button
+            type="button"
+            class="delyvo-product-filter"
+            data-product-filter="active">
+            Active
+          </button>
+
+          <button
+            type="button"
+            class="delyvo-product-filter"
+            data-product-filter="low">
+            Low Stock
+          </button>
+
+          <button
+            type="button"
+            class="delyvo-product-filter"
+            data-product-filter="inactive">
+            Inactive
+          </button>
+        </div>
+
+        <div id="delyvoProductCount" class="delyvo-product-count">
+          Products: 0
+        </div>
+      </div>
+    `;
+
+    section.prepend(tools);
+
+    tools.querySelectorAll("[data-product-filter]").forEach(button => {
+      button.addEventListener("click", () => {
+        tools
+          .querySelectorAll("[data-product-filter]")
+          .forEach(item => item.classList.remove("active"));
+
+        button.classList.add("active");
+
+        window.__delyvoProductFilter =
+          button.getAttribute("data-product-filter") || "all";
+
+        window.applyDelyvoProductManagementFilter();
+      });
+    });
+
+    const searchInput =
+      document.getElementById("delyvoProductSearch");
+
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        window.__delyvoProductSearch =
+          String(searchInput.value || "").trim().toLowerCase();
+
+        window.applyDelyvoProductManagementFilter();
+      });
+    }
+  }
+
+  let container =
+    document.getElementById("finalShopProductsList");
+
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "finalShopProductsList";
+    section.appendChild(container);
+  }
+
+  let container =
+    document.getElementById("finalShopProductsList");
+
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "finalShopProductsList";
+    section.appendChild(container);
+  }
+
+  if (!window.finalShopProducts.length) {
+    container.innerHTML = `
+      <div class="shop-product-empty">
+        No products found.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML =
+    window.finalShopProducts.map(product => {
+
+      const available =
+        product.stock_qty - product.reserved_qty;
+
+      const lowStock =
+        available <= product.reorder_level;
+
+      const inactive =
+        !product.is_active;
+
+      const statusText =
+        inactive
+          ? "Inactive"
+          : lowStock
+            ? "Low Stock"
+            : "Active";
+
+      const statusClass =
+        inactive
+          ? "inactive"
+          : lowStock
+            ? "low"
+            : "active";
+
+      return `
+        <div
+          class="final-shop-product"
+          data-product-id="${product.id}"
+          data-name="${escapeShopText(
+            product.name + " " + product.variant_name
+          ).toLowerCase()}"
+          data-status="${statusClass}"
+        >
+
+          <div class="final-product-main">
+
+            <div class="final-product-info">
+              <strong>
+                ${escapeShopText(product.name)}
+              </strong>
+
+              ${
+                product.variant_name
+                  ? `<span>
+                      ${escapeShopText(product.variant_name)}
+                    </span>`
+                  : ""
+              }
+
+              ${
+                product.sku
+                  ? `<small>
+                      SKU: ${escapeShopText(product.sku)}
+                    </small>`
+                  : ""
+              }
+            </div>
+
+            <span class="final-product-status ${statusClass}">
+              ${statusText}
+            </span>
+
+          </div>
+
+
+          <div class="final-product-fields">
+
+            <label>
+              MRP
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                data-field="mrp"
+                value="${product.mrp}"
+              >
+            </label>
+
+            <label>
+              Selling Price
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                data-field="selling_price"
+                value="${product.selling_price}"
+              >
+            </label>
+
+            <label>
+              Stock
+              <input
+                type="number"
+                step="1"
+                min="0"
+                data-field="stock_qty"
+                value="${product.stock_qty}"
+              >
+            </label>
+
+          </div>
+
+
+          <div class="final-product-bottom">
+
+            <div>
+              Available:
+              <strong>
+                ${available}
+              </strong>
+
+              <span class="final-stock-breakdown">
+                Stock ${product.stock_qty}
+                · Reserved ${product.reserved_qty}
+              </span>
+
+              ${
+                lowStock
+                  ? `<span class="final-low-stock">
+                      Low stock
+                    </span>`
+                  : ""
+              }
+            </div>
+
+            <div class="final-product-buttons">
+
+              <button
+                class="secondary-btn"
+                onclick="toggleFinalShopProduct('${product.id}')"
+              >
+                ${product.is_active ? "Turn Off" : "Turn On"}
+              </button>
+
+              <button
+                class="primary-btn"
+                onclick="saveFinalShopProduct('${product.id}')"
+              >
+                Save
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      `;
+    }).join("");
+};
+
+
+
+/* ---------------------------------------------------------
+   PRODUCT MANAGEMENT FILTER
+   --------------------------------------------------------- */
+
+window.__delyvoProductFilter = "all";
+window.__delyvoProductSearch = "";
+
+window.applyDelyvoProductManagementFilter = function () {
+  const cards =
+    document.querySelectorAll(".final-shop-product");
+
+  const filter =
+    window.__delyvoProductFilter || "all";
+
+  const search =
+    String(window.__delyvoProductSearch || "").toLowerCase();
+
+  let visible = 0;
+
+  cards.forEach(card => {
+    const name =
+      String(card.getAttribute("data-name") || "").toLowerCase();
+
+    const status =
+      String(card.getAttribute("data-status") || "").toLowerCase();
+
+    const matchesSearch =
+      !search || name.includes(search);
+
+    let matchesFilter = true;
+
+    if (filter === "active") {
+      matchesFilter = status === "active";
+    }
+
+    if (filter === "low") {
+      matchesFilter = status === "low";
+    }
+
+    if (filter === "inactive") {
+      matchesFilter = status === "inactive";
+    }
+
+    const show =
+      matchesSearch && matchesFilter;
+
+    card.style.display =
+      show ? "" : "none";
+
+    if (show) visible++;
+  });
+
+  const count =
+    document.getElementById("delyvoProductCount");
+
+  if (count) {
+    count.textContent =
+      `Products: ${visible}`;
+  }
+};
+
+/* ---------------------------------------------------------
+   SAVE PRODUCT
+   --------------------------------------------------------- */
+
+window.saveFinalShopProduct = async function (variantId) {
+  try {
+    const token =
+      localStorage.getItem("delyvo_shop_token");
+
+    const card =
+      document.querySelector(
+        `.final-shop-product[data-product-id="${variantId}"]`
+      );
+
+    if (!card) return;
+
+    const product =
+      window.finalShopProducts.find(
+        item => item.id === variantId
+      );
+
+    if (!product) return;
+
+    const mrp =
+      Number(
+        card.querySelector(
+          '[data-field="mrp"]'
+        ).value
+      );
+
+    const sellingPrice =
+      Number(
+        card.querySelector(
+          '[data-field="selling_price"]'
+        ).value
+      );
+
+    const stock =
+      Number(
+        card.querySelector(
+          '[data-field="stock_qty"]'
+        ).value
+      );
+
+    if (mrp < 0 || sellingPrice < 0 || stock < 0) {
+      alert("Price aur stock 0 se kam nahi ho sakta.");
+      return;
+    }
+
+    if (sellingPrice > mrp) {
+      alert("Selling price MRP se zyada nahi ho sakta.");
+      return;
+    }
+
+    const headers = {
+      "Content-Type": "application/json",
+      apikey: SHOP_SUPABASE_KEY,
+      Authorization: `Bearer ${token}`,
+      Prefer: "return=minimal"
+    };
+
+    const variantResponse =
+      await fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/product_variants?id=eq.${variantId}`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            mrp: mrp,
+            selling_price: sellingPrice
+          })
+        }
+      );
+
+    if (!variantResponse.ok) {
+      const error = await variantResponse.text();
+      throw new Error(error || "Product price save failed.");
+    }
+
+    if (product.inventory_id) {
+      const inventoryResponse =
+        await fetch(
+          `${SHOP_SUPABASE_URL}/rest/v1/inventory?id=eq.${product.inventory_id}`,
+          {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({
+              stock_qty: stock,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+
+      if (!inventoryResponse.ok) {
+        const error = await inventoryResponse.text();
+        throw new Error(
+          error || "Inventory save failed."
+        );
+      }
+    }
+
+    alert("Product updated successfully.");
+
+    await window.loadFinalShopProducts();
+
+    if (typeof window.loadShopDashboard === "function") {
+      await window.loadShopDashboard();
+    }
+
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Product update failed.");
+  }
+};
+
+
+/* ---------------------------------------------------------
+   ACTIVE / INACTIVE
+   --------------------------------------------------------- */
+
+window.toggleFinalShopProduct = async function (variantId) {
+  try {
+    const token =
+      localStorage.getItem("delyvo_shop_token");
+
+    const product =
+      window.finalShopProducts.find(
+        item => item.id === variantId
+      );
+
+    if (!product) return;
+
+    const newState =
+      !product.is_active;
+
+    const response =
+      await fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/product_variants?id=eq.${variantId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SHOP_SUPABASE_KEY,
+            Authorization: `Bearer ${token}`,
+            Prefer: "return=minimal"
+          },
+          body: JSON.stringify({
+            is_active: newState
+          })
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        "Product status update failed."
+      );
+    }
+
+    await window.loadFinalShopProducts();
+
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Product status update failed.");
+  }
+};
+
+
+/* ---------------------------------------------------------
+   SEARCH + FILTER
+   --------------------------------------------------------- */
+
+window.filterFinalShopProducts = function () {
+  const search =
+    String(
+      document.getElementById(
+        "finalShopProductSearch"
+      )?.value || ""
+    ).trim().toLowerCase();
+
+  const filter =
+    String(
+      document.getElementById(
+        "finalShopProductFilter"
+      )?.value || "all"
+    ).toLowerCase();
+
+  document
+    .querySelectorAll(".final-shop-product")
+    .forEach(card => {
+
+      const name =
+        String(
+          card.dataset.name || ""
+        ).toLowerCase();
+
+      const status =
+        String(
+          card.dataset.status || ""
+        ).toLowerCase();
+
+      const matchesSearch =
+        !search ||
+        name.includes(search);
+
+      const matchesFilter =
+        filter === "all" ||
+        status === filter;
+
+      card.style.display =
+        matchesSearch && matchesFilter
+          ? ""
+          : "none";
+    });
+};
+
+
+/* ---------------------------------------------------------
+   FILTER UI
+   --------------------------------------------------------- */
+
+window.addFinalShopProductFilters = function () {
+  const section =
+    document.getElementById("productsSection") ||
+    document.getElementById("shopProductsSection");
+
+  if (!section) return;
+
+  if (
+    document.getElementById(
+      "finalShopProductFilters"
+    )
+  ) {
+    return;
+  }
+
+  const box =
+    document.createElement("div");
+
+  box.id =
+    "finalShopProductFilters";
+
+  box.className =
+    "final-shop-product-filters";
+
+  box.innerHTML = `
+    <input
+      id="finalShopProductSearch"
+      type="search"
+      placeholder="Search product..."
+    >
+
+    <select id="finalShopProductFilter">
+      <option value="all">All Products</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+      <option value="low">Low Stock</option>
+    </select>
+  `;
+
+  section.prepend(box);
+
+  document
+    .getElementById(
+      "finalShopProductSearch"
+    )
+    .addEventListener(
+      "input",
+      window.filterFinalShopProducts
+    );
+
+  document
+    .getElementById(
+      "finalShopProductFilter"
+    )
+    .addEventListener(
+      "change",
+      window.filterFinalShopProducts
+    );
+};
+
+
+/* ---------------------------------------------------------
+   STYLE
+   --------------------------------------------------------- */
+
+if (
+  !document.getElementById(
+    "final-shop-products-css"
+  )
+) {
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "final-shop-products-css";
+
+  style.textContent = `
+    .final-shop-product-filters {
+      display: flex;
+      gap: 10px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+
+    .final-shop-product-filters input,
+    .final-shop-product-filters select {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      min-height: 42px;
+    }
+
+    .final-shop-product {
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: #fff;
+    }
+
+    .final-product-main,
+    .final-product-bottom,
+    .final-product-buttons {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .final-product-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .final-product-info span {
+      color: #666;
+    }
+
+    .final-product-info small {
+      color: #888;
+    }
+
+    .final-product-status {
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .final-product-status.active {
+      background: #e8f7ed;
+      color: #16803c;
+    }
+
+    .final-product-status.low {
+      background: #fff4d6;
+      color: #9a6b00;
+    }
+
+    .final-product-status.inactive {
+      background: #eee;
+      color: #666;
+    }
+
+    .final-product-fields {
+      display: grid;
+      grid-template-columns:
+        repeat(3, minmax(120px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .final-product-fields label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 13px;
+      color: #555;
+    }
+
+    .final-product-fields input {
+      padding: 9px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .final-low-stock {
+      margin-left: 8px;
+      color: #b56d00;
+      font-weight: 700;
+    }
+
+    .shop-product-empty {
+      padding: 30px;
+      text-align: center;
+    }
+
+    @media (max-width: 650px) {
+      .final-product-fields {
+        grid-template-columns: 1fr;
+      }
+
+      .final-product-main,
+      .final-product-bottom {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
+/* ---------------------------------------------------------
+   INITIALIZE
+   --------------------------------------------------------- */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+    setTimeout(function () {
+      window.addFinalShopProductFilters();
+      window.loadFinalShopProducts();
+    }, 700);
+  }
+);
+
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP - FINAL DASHBOARD
+   ========================================================= */
+
+window.loadFinalShopDashboard = async function () {
+  try {
+    const token = localStorage.getItem("delyvo_shop_token");
+
+    if (!token) return;
+
+    const headers = {
+      apikey: SHOP_SUPABASE_KEY,
+      Authorization: `Bearer ${token}`
+    };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayISO = today.toISOString();
+
+    const [
+      ordersResponse,
+      productsResponse,
+      inventoryResponse
+    ] = await Promise.all([
+      fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/orders?select=id,status,total,created_at&created_at=gte.${encodeURIComponent(todayISO)}&order=created_at.desc`,
+        { headers }
+      ),
+
+      fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/product_variants?select=id,is_active`,
+        { headers }
+      ),
+
+      fetch(
+        `${SHOP_SUPABASE_URL}/rest/v1/inventory?select=id,stock_qty,reserved_qty,reorder_level&store_id=eq.7ef989c8-9826-437b-8a63-bb0dfa817540`,
+        { headers }
+      )
+    ]);
+
+    const orders = await ordersResponse.json();
+    const products = await productsResponse.json();
+    const inventory = await inventoryResponse.json();
+
+    if (!ordersResponse.ok) {
+      throw new Error("Orders dashboard load failed.");
+    }
+
+    if (!productsResponse.ok) {
+      throw new Error("Products dashboard load failed.");
+    }
+
+    if (!inventoryResponse.ok) {
+      throw new Error("Inventory dashboard load failed.");
+    }
+
+    const safeOrders =
+      Array.isArray(orders) ? orders : [];
+
+    const safeProducts =
+      Array.isArray(products) ? products : [];
+
+    const safeInventory =
+      Array.isArray(inventory) ? inventory : [];
+
+    const totalOrders =
+      safeOrders.length;
+
+    const pendingOrders =
+      safeOrders.filter(order =>
+        ["pending", "placed"].includes(
+          String(order.status || "").toLowerCase()
+        )
+      ).length;
+
+    const preparingOrders =
+      safeOrders.filter(order =>
+        ["confirmed", "packing", "packed"].includes(
+          String(order.status || "").toLowerCase()
+        )
+      ).length;
+
+    const outForDeliveryOrders =
+      safeOrders.filter(order =>
+        String(order.status || "").toLowerCase() ===
+        "out_for_delivery"
+      ).length;
+
+    const deliveredOrders =
+      safeOrders.filter(order =>
+        String(order.status || "").toLowerCase() ===
+        "delivered"
+      ).length;
+
+    const todaySales =
+      safeOrders
+        .filter(order =>
+          String(order.status || "").toLowerCase() !==
+          "cancelled"
+        )
+        .reduce(
+          (sum, order) =>
+            sum + Number(order.total || 0),
+          0
+        );
+
+    const lowStock =
+      safeInventory.filter(item => {
+        const available =
+          Number(item.stock_qty || 0) -
+          Number(item.reserved_qty || 0);
+
+        return available <=
+          Number(item.reorder_level || 5);
+      }).length;
+
+    const activeProducts =
+      safeProducts.filter(
+        product => product.is_active !== false
+      ).length;
+
+    const setValue = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setValue("finalDashOrders", totalOrders);
+    setValue("finalDashPending", pendingOrders);
+    setValue("finalDashPreparing", preparingOrders);
+    setValue("finalDashDelivery", outForDeliveryOrders);
+    setValue(
+      "finalDashSales",
+      `₹${todaySales.toFixed(2)}`
+    );
+    setValue("finalDashLowStock", lowStock);
+    setValue("finalDashProducts", activeProducts);
+    setValue(
+      "finalDashDelivered",
+      deliveredOrders
+    );
+
+    const updated =
+      document.getElementById(
+        "finalDashUpdated"
+      );
+
+    if (updated) {
+      updated.textContent =
+        `Updated ${new Date().toLocaleTimeString(
+          "en-IN",
+          {
+            hour: "2-digit",
+            minute: "2-digit"
+          }
+        )}`;
+    }
+
+  } catch (error) {
+    console.error(
+      "FINAL DASHBOARD ERROR:",
+      error
+    );
+  }
+};
+
+
+/* ---------------------------------------------------------
+   DASHBOARD UI
+   --------------------------------------------------------- */
+
+window.addFinalShopDashboard = function () {
+
+  if (
+    document.getElementById(
+      "finalShopDashboard"
+    )
+  ) {
+    return;
+  }
+
+  const dashboard =
+    document.createElement("section");
+
+  dashboard.id =
+    "finalShopDashboard";
+
+  dashboard.className =
+    "final-shop-dashboard";
+
+  dashboard.innerHTML = `
+    <div class="final-dashboard-header">
+
+      <div>
+        <h2>Shop Dashboard</h2>
+        <p>Delyvo Modinagar Store</p>
+      </div>
+
+      <div class="final-dashboard-actions">
+
+        <span id="finalDashUpdated">
+          Loading...
+        </span>
+
+        <button
+          class="secondary-btn"
+          onclick="loadFinalShopDashboard()"
+        >
+          Refresh
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <div class="final-dashboard-grid">
+
+      <div class="final-dashboard-card">
+        <span>Today's Orders</span>
+        <strong id="finalDashOrders">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Pending</span>
+        <strong id="finalDashPending">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Preparing</span>
+        <strong id="finalDashPreparing">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Out for Delivery</span>
+        <strong id="finalDashDelivery">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Delivered</span>
+        <strong id="finalDashDelivered">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Today's Sales</span>
+        <strong id="finalDashSales">₹0.00</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Low Stock</span>
+        <strong id="finalDashLowStock">0</strong>
+      </div>
+
+      <div class="final-dashboard-card">
+        <span>Active Products</span>
+        <strong id="finalDashProducts">0</strong>
+      </div>
+
+    </div>
+
+
+    <div class="final-dashboard-note">
+      Orders automatically refresh every 30 seconds.
+    </div>
+  `;
+
+  const firstBodyChild =
+    document.body.firstElementChild;
+
+  if (firstBodyChild) {
+    document.body.insertBefore(
+      dashboard,
+      firstBodyChild
+    );
+  } else {
+    document.body.appendChild(
+      dashboard
+    );
+  }
+};
+
+
+/* ---------------------------------------------------------
+   AUTO REFRESH
+   --------------------------------------------------------- */
+
+window.finalShopDashboardInterval =
+  window.finalShopDashboardInterval ||
+  setInterval(function () {
+
+    if (
+      typeof window.loadFinalShopDashboard ===
+      "function"
+    ) {
+      window.loadFinalShopDashboard();
+    }
+
+    if (
+      typeof window.loadFinalShopProducts ===
+      "function"
+    ) {
+      window.loadFinalShopProducts();
+    }
+
+    if (
+      typeof window.loadShopOrders ===
+      "function"
+    ) {
+      window.loadShopOrders();
+    } else if (
+      typeof window.loadOrders ===
+      "function"
+    ) {
+      window.loadOrders();
+    }
+
+  }, 30000);
+
+
+/* ---------------------------------------------------------
+   STYLE
+   --------------------------------------------------------- */
+
+if (
+  !document.getElementById(
+    "final-shop-dashboard-css"
+  )
+) {
+
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "final-shop-dashboard-css";
+
+  style.textContent = `
+    .final-shop-dashboard {
+      margin: 20px auto;
+      max-width: 1200px;
+      padding: 0 16px;
+    }
+
+    .final-dashboard-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .final-dashboard-header h2 {
+      margin: 0 0 4px;
+    }
+
+    .final-dashboard-header p {
+      margin: 0;
+      color: #777;
+    }
+
+    .final-dashboard-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #finalDashUpdated {
+      color: #777;
+      font-size: 13px;
+    }
+
+    .final-dashboard-grid {
+      display: grid;
+      grid-template-columns:
+        repeat(4, minmax(150px, 1fr));
+      gap: 14px;
+    }
+
+    .final-dashboard-card {
+      border: 1px solid #e5e5e5;
+      border-radius: 14px;
+      padding: 18px;
+      background: #fff;
+      min-height: 90px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .final-dashboard-card span {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .final-dashboard-card strong {
+      font-size: 27px;
+    }
+
+    .final-dashboard-note {
+      margin-top: 14px;
+      color: #777;
+      font-size: 13px;
+    }
+
+    @media (max-width: 800px) {
+      .final-dashboard-grid {
+        grid-template-columns:
+          repeat(2, minmax(140px, 1fr));
+      }
+
+      .final-dashboard-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .final-dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
+/* ---------------------------------------------------------
+   INITIALIZE
+   --------------------------------------------------------- */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+
+    setTimeout(function () {
+
+      window.addFinalShopDashboard();
+
+      window.loadFinalShopDashboard();
+
+    }, 900);
+
+  }
+);
+
+</script>
+
+
+
+<!-- DELYVO SHOP NEW ORDER ALERT -->
+<script>
+(() => {
+  let lastOrderIds = [];
+  let firstLoad = true;
+
+  function getOrderList() {
+    if (Array.isArray(window.delyvoShopOrders)) {
+      return window.delyvoShopOrders;
+    }
+
+    if (Array.isArray(window.shopOrders)) {
+      return window.shopOrders;
+    }
+
+    return [];
+  }
+
+  function showNewOrderAlert(count) {
+    let old = document.getElementById(
+      "delyvoNewOrderAlert"
+    );
+
+    if (old) {
+      old.remove();
+    }
+
+    const box = document.createElement("div");
+
+    box.id = "delyvoNewOrderAlert";
+
+    box.innerHTML = `
+      <div class="delyvo-noa-card">
+        <div class="delyvo-noa-icon">🛒</div>
+
+        <div class="delyvo-noa-content">
+          <strong>New Order Received</strong>
+          <span>
+            ${count} new order${count > 1 ? "s" : ""}
+            received
+          </span>
+        </div>
+
+        <button id="delyvoNoaClose">
+          ×
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(box);
+
+    document.getElementById(
+      "delyvoNoaClose"
+    ).onclick = () => box.remove();
+
+    setTimeout(() => {
+      if (box.parentNode) {
+        box.remove();
+      }
+    }, 7000);
+  }
+
+  function checkForNewOrders() {
+    const orders = getOrderList();
+
+    if (!orders.length) {
+      return;
+    }
+
+    const currentIds = orders
+      .filter(order =>
+        order &&
+        order.id &&
+        (
+          order.status === "pending" ||
+          order.status === "placed"
+        )
+      )
+      .map(order => order.id);
+
+    if (firstLoad) {
+      lastOrderIds = currentIds;
+      firstLoad = false;
+      return;
+    }
+
+    const newOrders = currentIds.filter(
+      id => !lastOrderIds.includes(id)
+    );
+
+    if (newOrders.length) {
+      showNewOrderAlert(newOrders.length);
+
+      try {
+        const audio =
+          new Audio(
+            "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
+          );
+
+        audio.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    lastOrderIds = currentIds;
+  }
+
+  async function refreshShopOrders() {
+    try {
+      if (
+        typeof window.loadShopOrders === "function"
+      ) {
+        await window.loadShopOrders();
+      } else if (
+        typeof window.loadShop === "function"
+      ) {
+        await window.loadShop();
+      }
+
+      setTimeout(checkForNewOrders, 300);
+
+    } catch (error) {
+      console.error(
+        "DELYVO SHOP AUTO REFRESH ERROR:",
+        error
+      );
+    }
+  }
+
+  window.delyvoShopNewOrderCheck =
+    checkForNewOrders;
+
+  /*
+   * Shop orders refresh every 20 seconds.
+   */
+  setInterval(
+    refreshShopOrders,
+    20000
+  );
+
+  /*
+   * First check after page is ready.
+   */
+  setTimeout(() => {
+    checkForNewOrders();
+  }, 1500);
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    #delyvoNewOrderAlert {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 999999;
+      animation:
+        delyvoOrderAlertIn
+        .25s ease-out;
+    }
+
+    .delyvo-noa-card {
+      min-width: 300px;
+      max-width: 380px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 14px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      box-shadow:
+        0 12px 35px
+        rgba(0,0,0,.18);
+    }
+
+    .delyvo-noa-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: #f3f4f6;
+      font-size: 22px;
+    }
+
+    .delyvo-noa-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .delyvo-noa-content strong {
+      font-size: 15px;
+      color: #111827;
+    }
+
+    .delyvo-noa-content span {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    #delyvoNoaClose {
+      width: 30px;
+      height: 30px;
+      border: 0;
+      border-radius: 8px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    @keyframes delyvoOrderAlertIn {
+      from {
+        opacity: 0;
+        transform:
+          translateY(-10px);
+      }
+
+      to {
+        opacity: 1;
+        transform:
+          translateY(0);
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  console.log(
+    "DELYVO SHOP NEW ORDER ALERT READY"
+  );
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP ORDER DETAILS
+   ========================================================= */
+(() => {
+  const marker = "DELYVO SHOP ORDER DETAILS";
+  if (window.__delyvoShopOrderDetailsReady) return;
+  window.__delyvoShopOrderDetailsReady = true;
+
+  function esc(value) {
+    if (typeof window.escapeShopText === "function") {
+      return window.escapeShopText(value);
+    }
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function money(value) {
+    return "₹" + Number(value || 0).toFixed(2);
+  }
+
+  window.openShopOrderDetails = function(orderId) {
+    const orders =
+      Array.isArray(window.delyvoShopOrders)
+        ? window.delyvoShopOrders
+        : Array.isArray(window.shopOrders)
+          ? window.shopOrders
+          : [];
+
+    const order = orders.find(
+      item => String(item.id) === String(orderId)
+    );
+
+    if (!order) {
+      alert("Order details load nahi ho paye. Please Refresh karke dobara try karein.");
+      return;
+    }
+
+    const address = order.addresses || order.address || {};
+    const items = Array.isArray(order.order_items)
+      ? order.order_items
+      : [];
+
+    let old = document.getElementById("delyvoShopOrderDetails");
+    if (old) old.remove();
+
+    const itemRows = items.length
+      ? items.map(item => `
+          <div class="sod-item">
+            <div>
+              <strong>${esc(item.product_name || "Product")}</strong>
+              ${
+                item.variant_name
+                  ? `<span>${esc(item.variant_name)}</span>`
+                  : ""
+              }
+              <small>
+                Qty: ${Number(item.quantity || 0)}
+                × ${money(item.unit_price)}
+              </small>
+            </div>
+            <strong>${money(item.total)}</strong>
+          </div>
+        `).join("")
+      : `<div class="sod-empty">Items unavailable</div>`;
+
+    const modal = document.createElement("div");
+    modal.id = "delyvoShopOrderDetails";
+
+    modal.innerHTML = `
+      <div class="sod-backdrop"></div>
+
+      <div class="sod-card">
+        <div class="sod-head">
+          <div>
+            <h2>Order Details</h2>
+            <p>${esc(order.order_number || "Order")}</p>
+          </div>
+
+          <button
+            type="button"
+            class="sod-close"
+            aria-label="Close">
+            ×
+          </button>
+        </div>
+
+        <div class="sod-status">
+          <span>Current Status</span>
+          <strong>
+            ${
+              typeof window.formatShopStatus === "function"
+                ? esc(window.formatShopStatus(order.status))
+                : esc(order.status || "Pending")
+            }
+          </strong>
+        </div>
+
+        <div class="sod-section">
+          <h3>Customer</h3>
+
+          <div class="sod-customer">
+            <strong>${esc(address.recipient_name || "Customer")}</strong>
+
+            ${
+              address.phone
+                ? `<div>📞 ${esc(address.phone)}</div>`
+                : ""
+            }
+
+            <div>
+              📍 ${esc(address.address_line1 || "")}
+            </div>
+
+            ${
+              address.address_line2
+                ? `<div>${esc(address.address_line2)}</div>`
+                : ""
+            }
+
+            ${
+              address.landmark
+                ? `<div>Landmark: ${esc(address.landmark)}</div>`
+                : ""
+            }
+
+            <div>
+              ${esc(address.city || "Modinagar")},
+              ${esc(address.state || "Uttar Pradesh")}
+              - ${esc(address.pincode || "201204")}
+            </div>
+          </div>
+        </div>
+
+        <div class="sod-section">
+          <h3>Ordered Items</h3>
+
+          <div class="sod-items">
+            ${itemRows}
+          </div>
+        </div>
+
+        <div class="sod-section">
+          <h3>Bill Details</h3>
+
+          <div class="sod-bill-row">
+            <span>Subtotal</span>
+            <strong>${money(order.subtotal)}</strong>
+          </div>
+
+          <div class="sod-bill-row">
+            <span>Delivery Fee</span>
+            <strong>${money(order.delivery_fee)}</strong>
+          </div>
+
+          <div class="sod-bill-total">
+            <span>Total</span>
+            <strong>${money(order.total)}</strong>
+          </div>
+        </div>
+
+        <div class="sod-section">
+          <h3>Payment</h3>
+
+          <div class="sod-payment">
+            💵 Cash on Delivery
+          </div>
+        </div>
+
+        <div class="sod-section">
+          <h3>Order Time</h3>
+
+          <div class="sod-time">
+            ${
+              typeof window.formatShopDate === "function"
+                ? esc(window.formatShopDate(order.created_at))
+                : esc(order.created_at || "")
+            }
+          </div>
+        </div>
+
+        <div class="sod-footer">
+          <button type="button" class="sod-close-btn">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => modal.remove();
+
+    modal.querySelector(".sod-close").onclick = close;
+    modal.querySelector(".sod-close-btn").onclick = close;
+    modal.querySelector(".sod-backdrop").onclick = close;
+  };
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .shop-details-btn {
+      border: 1px solid #d1d5db;
+      background: #fff;
+      color: #111827;
+      border-radius: 8px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+
+    .shop-details-btn:hover {
+      background: #f3f4f6;
+    }
+
+    #delyvoShopOrderDetails {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .sod-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+    }
+
+    .sod-card {
+      position: relative;
+      width: min(680px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+      background: #fff;
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+
+    .sod-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 15px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 14px;
+    }
+
+    .sod-head h2 {
+      margin: 0 0 5px;
+    }
+
+    .sod-head p {
+      margin: 0;
+      color: #666;
+      font-weight: 600;
+    }
+
+    .sod-close {
+      border: 0;
+      background: #f3f4f6;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      font-size: 25px;
+      cursor: pointer;
+    }
+
+    .sod-status {
+      margin: 16px 0;
+      padding: 14px;
+      border-radius: 10px;
+      background: #f5f7fa;
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
+    .sod-section {
+      margin-top: 20px;
+    }
+
+    .sod-section h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .sod-customer {
+      line-height: 1.7;
+      padding: 13px;
+      background: #fafafa;
+      border-radius: 10px;
+    }
+
+    .sod-items {
+      border: 1px solid #eee;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .sod-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 13px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .sod-item:last-child {
+      border-bottom: 0;
+    }
+
+    .sod-item span,
+    .sod-item small {
+      display: block;
+      color: #666;
+      margin-top: 3px;
+    }
+
+    .sod-bill-row,
+    .sod-bill-total {
+      display: flex;
+      justify-content: space-between;
+      padding: 9px 0;
+    }
+
+    .sod-bill-total {
+      border-top: 1px solid #ddd;
+      margin-top: 5px;
+      padding-top: 13px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .sod-payment,
+    .sod-time {
+      padding: 12px;
+      background: #fafafa;
+      border-radius: 9px;
+    }
+
+    .sod-footer {
+      margin-top: 22px;
+      text-align: right;
+    }
+
+    .sod-close-btn {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 18px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .sod-empty {
+      padding: 15px;
+      color: #777;
+    }
+
+    @media (max-width: 600px) {
+      .sod-card {
+        padding: 16px;
+      }
+
+      .sod-status {
+        flex-direction: column;
+      }
+
+      .sod-item {
+        flex-direction: column;
+      }
+    }
+  `;
+
+  style.dataset.delyvoMarker = marker;
+  document.head.appendChild(style);
+
+  console.log("DELYVO SHOP ORDER DETAILS READY");
+})();
+</script>
+
+
+<style>
+/* DELYVO SHOP PRODUCT MANAGEMENT UI V2 */
+
+.delyvo-product-tools {
+  margin: 12px 0 18px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.delyvo-product-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.delyvo-product-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.delyvo-product-filter {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.delyvo-product-filter.active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.delyvo-product-count {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.final-stock-breakdown {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.final-product-fields input {
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .delyvo-product-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .delyvo-product-filter {
+    width: 100%;
+  }
+}
+</style>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP DASHBOARD V2
+   ========================================================= */
+(() => {
+  const MARKER = "DELYVO SHOP DASHBOARD V2";
+
+  function addDashboardActions() {
+    const dashboard = document.getElementById("finalShopDashboard");
+    if (!dashboard) return;
+
+    if (dashboard.querySelector(".delyvo-dashboard-shortcuts")) {
+      return;
+    }
+
+    const box = document.createElement("div");
+    box.className = "delyvo-dashboard-shortcuts";
+
+    box.innerHTML = `
+      <div class="delyvo-dashboard-shortcut-title">
+        Quick Management
+      </div>
+
+      <div class="delyvo-dashboard-shortcut-grid">
+
+        <button
+          type="button"
+          class="delyvo-dashboard-shortcut"
+          onclick="delyvoOpenShopSection('ordersSection')">
+          <strong>Orders</strong>
+          <span>Manage customer orders</span>
+        </button>
+
+        <button
+          type="button"
+          class="delyvo-dashboard-shortcut"
+          onclick="delyvoOpenShopSection('productsSection')">
+          <strong>Products</strong>
+          <span>Price and stock management</span>
+        </button>
+
+        <button
+          type="button"
+          class="delyvo-dashboard-shortcut"
+          onclick="delyvoOpenLowStockProducts()">
+          <strong>Low Stock</strong>
+          <span>Check products needing stock</span>
+        </button>
+
+      </div>
+    `;
+
+    dashboard.appendChild(box);
+  }
+
+  window.delyvoOpenShopSection = function(sectionId) {
+    const section =
+      document.getElementById(sectionId) ||
+      document.querySelector("." + sectionId);
+
+    if (!section) {
+      console.log("DELYVO DASHBOARD SECTION NOT FOUND:", sectionId);
+      return;
+    }
+
+    section.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  };
+
+  window.delyvoOpenLowStockProducts = function() {
+    const section =
+      document.getElementById("productsSection") ||
+      document.querySelector(".products-section");
+
+    if (section) {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }
+
+    setTimeout(() => {
+      const filterButton =
+        document.querySelector(
+          '[data-product-filter="low"]'
+        );
+
+      if (filterButton) {
+        filterButton.click();
+        return;
+      }
+
+      const lowFilter =
+        Array.from(
+          document.querySelectorAll(
+            "#delyvoProductTools button"
+          )
+        ).find(button =>
+          String(button.textContent || "")
+            .trim()
+            .toLowerCase()
+            .includes("low")
+        );
+
+      if (lowFilter) {
+        lowFilter.click();
+      }
+    }, 250);
+  };
+
+  function injectDashboardStyles() {
+    if (document.getElementById("delyvoDashboardV2Styles")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = "delyvoDashboardV2Styles";
+
+    style.textContent = `
+      .delyvo-dashboard-shortcuts {
+        margin-top: 18px;
+        padding: 16px;
+        border: 1px solid #e8e8e8;
+        border-radius: 14px;
+        background: #fff;
+      }
+
+      .delyvo-dashboard-shortcut-title {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+
+      .delyvo-dashboard-shortcut-grid {
+        display: grid;
+        grid-template-columns:
+          repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .delyvo-dashboard-shortcut {
+        width: 100%;
+        text-align: left;
+        border: 1px solid #e5e5e5;
+        background: #fafafa;
+        border-radius: 12px;
+        padding: 14px;
+        cursor: pointer;
+      }
+
+      .delyvo-dashboard-shortcut strong {
+        display: block;
+        font-size: 15px;
+        margin-bottom: 5px;
+      }
+
+      .delyvo-dashboard-shortcut span {
+        display: block;
+        font-size: 12px;
+        color: #666;
+      }
+
+      .delyvo-dashboard-shortcut:hover {
+        transform: translateY(-1px);
+      }
+
+      @media (max-width: 700px) {
+        .delyvo-dashboard-shortcut-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function init() {
+    injectDashboardStyles();
+
+    const dashboard =
+      document.getElementById("finalShopDashboard");
+
+    if (dashboard) {
+      addDashboardActions();
+      return;
+    }
+
+    setTimeout(init, 500);
+  }
+
+  window.addEventListener("load", init);
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(init, 800);
+  });
+
+  console.log(MARKER);
+  console.log("Quick shortcuts : YES");
+  console.log("Orders shortcut : YES");
+  console.log("Products shortcut : YES");
+  console.log("Low stock shortcut : YES");
+  console.log("Existing dashboard preserved : YES");
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP DASHBOARD V3
+   Recent Orders + Low Stock Summary
+   ========================================================= */
+(() => {
+  const MARKER = "DELYVO SHOP DASHBOARD V3";
+
+  function esc(value) {
+    if (typeof window.escapeShopText === "function") {
+      return window.escapeShopText(value);
+    }
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function statusLabel(status) {
+    if (typeof window.formatShopStatus === "function") {
+      return window.formatShopStatus(status);
+    }
+
+    const map = {
+      pending: "New Order",
+      placed: "New Order",
+      confirmed: "Confirmed",
+      packing: "Packing",
+      packed: "Ready",
+      out_for_delivery: "Out for Delivery",
+      delivered: "Delivered",
+      cancelled: "Cancelled"
+    };
+
+    return map[status] || status;
+  }
+
+  function addDashboardSummary() {
+    const dashboard = document.getElementById("finalShopDashboard");
+    if (!dashboard) return;
+
+    if (dashboard.querySelector(".delyvo-dashboard-v3")) return;
+
+    const box = document.createElement("div");
+    box.className = "delyvo-dashboard-v3";
+
+    box.innerHTML = `
+      <div class="delyvo-dashboard-panel">
+        <div class="delyvo-dashboard-panel-head">
+          <div>
+            <h3>Recent Orders</h3>
+            <p>Latest customer orders</p>
+          </div>
+          <button
+            type="button"
+            class="secondary-btn"
+            onclick="delyvoOpenShopSection('ordersSection')">
+            View All
+          </button>
+        </div>
+
+        <div id="delyvoDashboardRecentOrders"
+             class="delyvo-dashboard-list">
+          Loading orders...
+        </div>
+      </div>
+
+      <div class="delyvo-dashboard-panel">
+        <div class="delyvo-dashboard-panel-head">
+          <div>
+            <h3>Low Stock Products</h3>
+            <p>Products needing attention</p>
+          </div>
+          <button
+            type="button"
+            class="secondary-btn"
+            onclick="delyvoOpenLowStockProducts()">
+            View Stock
+          </button>
+        </div>
+
+        <div id="delyvoDashboardLowStock"
+             class="delyvo-dashboard-list">
+          Loading stock...
+        </div>
+      </div>
+    `;
+
+    dashboard.appendChild(box);
+  }
+
+  function renderRecentOrders() {
+    const box =
+      document.getElementById("delyvoDashboardRecentOrders");
+
+    if (!box) return;
+
+    const orders =
+      Array.isArray(window.delyvoShopOrders)
+        ? window.delyvoShopOrders
+        : [];
+
+    if (!orders.length) {
+      box.innerHTML = `
+        <div class="delyvo-dashboard-empty">
+          No orders found.
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = orders
+      .slice(0, 5)
+      .map(order => {
+        const status =
+          String(order.status || "pending").toLowerCase();
+
+        const address =
+          order.addresses ||
+          order.address ||
+          {};
+
+        const name =
+          address.recipient_name ||
+          "Customer";
+
+        return `
+          <div class="delyvo-dashboard-order-row">
+            <div>
+              <strong>${esc(order.order_number || "Order")}</strong>
+              <span>${esc(name)}</span>
+            </div>
+
+            <div class="delyvo-dashboard-order-right">
+              <strong>₹${Number(order.total || 0).toFixed(2)}</strong>
+              <span class="status-${esc(status)}">
+                ${esc(statusLabel(status))}
+              </span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function renderLowStock() {
+    const box =
+      document.getElementById("delyvoDashboardLowStock");
+
+    if (!box) return;
+
+    const products =
+      Array.isArray(window.finalShopProducts)
+        ? window.finalShopProducts
+        : [];
+
+    const low = products
+      .filter(product => {
+        const available =
+          Number(product.stock_qty || 0) -
+          Number(product.reserved_qty || 0);
+
+        return (
+          product.is_active !== false &&
+          available <= Number(product.reorder_level || 5)
+        );
+      })
+      .sort((a, b) => {
+        const aa =
+          Number(a.stock_qty || 0) -
+          Number(a.reserved_qty || 0);
+
+        const bb =
+          Number(b.stock_qty || 0) -
+          Number(b.reserved_qty || 0);
+
+        return aa - bb;
+      })
+      .slice(0, 5);
+
+    if (!low.length) {
+      box.innerHTML = `
+        <div class="delyvo-dashboard-empty">
+          No low-stock products.
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = low
+      .map(product => {
+        const available =
+          Number(product.stock_qty || 0) -
+          Number(product.reserved_qty || 0);
+
+        return `
+          <div class="delyvo-dashboard-stock-row">
+            <div>
+              <strong>${esc(product.name || "Product")}</strong>
+              <span>
+                ${esc(product.variant_name || "")}
+              </span>
+            </div>
+
+            <div class="delyvo-dashboard-stock-count">
+              ${available}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function refreshSummary() {
+    renderRecentOrders();
+    renderLowStock();
+  }
+
+  function injectStyles() {
+    if (document.getElementById("delyvoDashboardV3Styles")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = "delyvoDashboardV3Styles";
+
+    style.textContent = `
+      .delyvo-dashboard-v3 {
+        display: grid;
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .delyvo-dashboard-panel {
+        background: #fff;
+        border: 1px solid #e8e8e8;
+        border-radius: 14px;
+        padding: 16px;
+      }
+
+      .delyvo-dashboard-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .delyvo-dashboard-panel-head h3 {
+        margin: 0;
+        font-size: 17px;
+      }
+
+      .delyvo-dashboard-panel-head p {
+        margin: 4px 0 0;
+        color: #777;
+        font-size: 12px;
+      }
+
+      .delyvo-dashboard-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .delyvo-dashboard-order-row,
+      .delyvo-dashboard-stock-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 0;
+        border-bottom: 1px solid #eee;
+      }
+
+      .delyvo-dashboard-order-row:last-child,
+      .delyvo-dashboard-stock-row:last-child {
+        border-bottom: 0;
+      }
+
+      .delyvo-dashboard-order-row span,
+      .delyvo-dashboard-stock-row span {
+        display: block;
+        margin-top: 3px;
+        color: #777;
+        font-size: 12px;
+      }
+
+      .delyvo-dashboard-order-right {
+        text-align: right;
+      }
+
+      .delyvo-dashboard-order-right span {
+        font-size: 11px;
+      }
+
+      .delyvo-dashboard-stock-count {
+        min-width: 38px;
+        text-align: center;
+        font-weight: 700;
+      }
+
+      .delyvo-dashboard-empty {
+        padding: 18px 4px;
+        color: #777;
+        font-size: 13px;
+        text-align: center;
+      }
+
+      @media (max-width: 700px) {
+        .delyvo-dashboard-v3 {
+          grid-template-columns: 1fr;
+        }
+
+        .delyvo-dashboard-panel-head {
+          align-items: flex-start;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function init() {
+    injectStyles();
+
+    const dashboard =
+      document.getElementById("finalShopDashboard");
+
+    if (!dashboard) {
+      setTimeout(init, 500);
+      return;
+    }
+
+    addDashboardSummary();
+    refreshSummary();
+  }
+
+  window.delyvoRefreshDashboardSummary =
+    refreshSummary;
+
+  window.addEventListener("load", () => {
+    setTimeout(init, 1200);
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(init, 1200);
+  });
+
+  console.log(MARKER);
+  console.log("Recent orders : YES");
+  console.log("Low stock summary : YES");
+  console.log("Existing dashboard preserved : YES");
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP DASHBOARD V4
+   Auto Sync Recent Orders + Low Stock
+   ========================================================= */
+(() => {
+  const MARKER = "DELYVO SHOP DASHBOARD V4";
+
+  async function syncDashboardData() {
+    try {
+      if (!localStorage.getItem("delyvo_shop_token")) {
+        return;
+      }
+
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      }
+
+      if (typeof window.loadFinalShopProducts === "function") {
+        await window.loadFinalShopProducts();
+      }
+
+      if (typeof window.loadFinalShopDashboard === "function") {
+        await window.loadFinalShopDashboard();
+      }
+
+      if (typeof window.delyvoRefreshDashboardSummary === "function") {
+        window.delyvoRefreshDashboardSummary();
+      }
+
+      const updated =
+        document.getElementById("finalDashUpdated");
+
+      if (updated) {
+        updated.textContent =
+          `Updated ${new Date().toLocaleTimeString(
+            "en-IN",
+            {
+              hour: "2-digit",
+              minute: "2-digit"
+            }
+          )}`;
+      }
+    } catch (error) {
+      console.log(
+        "DELYVO DASHBOARD SYNC:",
+        error.message
+      );
+    }
+  }
+
+  let syncTimer = null;
+
+  function startDashboardSync() {
+    if (syncTimer) {
+      clearInterval(syncTimer);
+    }
+
+    syncTimer = setInterval(
+      syncDashboardData,
+      30000
+    );
+  }
+
+  window.delyvoSyncDashboardData =
+    syncDashboardData;
+
+  window.delyvoStartDashboardSync =
+    startDashboardSync;
+
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      startDashboardSync();
+    }, 2000);
+  });
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      setTimeout(() => {
+        startDashboardSync();
+      }, 2000);
+    }
+  );
+
+  console.log(MARKER);
+  console.log("Orders auto sync : YES");
+  console.log("Products auto sync : YES");
+  console.log("Low stock auto sync : YES");
+  console.log("Dashboard summary sync : YES");
+  console.log("Existing refresh preserved : YES");
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP DASHBOARD V5
+   Order Status + Sales Breakdown
+   ========================================================= */
+(() => {
+  const MARKER = "DELYVO SHOP DASHBOARD V5";
+
+  function renderBreakdown() {
+    const dashboard =
+      document.getElementById("finalShopDashboard");
+
+    if (!dashboard) return;
+
+    if (dashboard.querySelector(".delyvo-dashboard-v5")) {
+      updateBreakdown();
+      return;
+    }
+
+    const box = document.createElement("div");
+    box.className = "delyvo-dashboard-v5";
+
+    box.innerHTML = `
+      <div class="delyvo-dashboard-panel">
+        <div class="delyvo-dashboard-panel-head">
+          <div>
+            <h3>Today's Order Status</h3>
+            <p>Current order distribution</p>
+          </div>
+        </div>
+
+        <div class="delyvo-status-breakdown">
+          <div class="delyvo-status-row">
+            <span>New Orders</span>
+            <strong id="dashV5Pending">0</strong>
+          </div>
+
+          <div class="delyvo-status-row">
+            <span>Preparing</span>
+            <strong id="dashV5Preparing">0</strong>
+          </div>
+
+          <div class="delyvo-status-row">
+            <span>Out for Delivery</span>
+            <strong id="dashV5Delivery">0</strong>
+          </div>
+
+          <div class="delyvo-status-row">
+            <span>Delivered</span>
+            <strong id="dashV5Delivered">0</strong>
+          </div>
+
+          <div class="delyvo-status-row">
+            <span>Cancelled</span>
+            <strong id="dashV5Cancelled">0</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="delyvo-dashboard-panel">
+        <div class="delyvo-dashboard-panel-head">
+          <div>
+            <h3>Today's Sales Breakdown</h3>
+            <p>Order value summary</p>
+          </div>
+        </div>
+
+        <div class="delyvo-sales-breakdown">
+          <div class="delyvo-sales-row">
+            <span>Total Orders Value</span>
+            <strong id="dashV5GrossSales">₹0.00</strong>
+          </div>
+
+          <div class="delyvo-sales-row">
+            <span>Delivered Value</span>
+            <strong id="dashV5DeliveredSales">₹0.00</strong>
+          </div>
+
+          <div class="delyvo-sales-row">
+            <span>Cancelled Value</span>
+            <strong id="dashV5CancelledSales">₹0.00</strong>
+          </div>
+
+          <div class="delyvo-sales-total">
+            <span>Active Order Value</span>
+            <strong id="dashV5ActiveSales">₹0.00</strong>
+          </div>
+        </div>
+      </div>
+    `;
+
+    dashboard.appendChild(box);
+    updateBreakdown();
+  }
+
+  function updateBreakdown() {
+    const orders =
+      Array.isArray(window.delyvoShopOrders)
+        ? window.delyvoShopOrders
+        : [];
+
+    let pending = 0;
+    let preparing = 0;
+    let delivery = 0;
+    let delivered = 0;
+    let cancelled = 0;
+
+    let grossSales = 0;
+    let deliveredSales = 0;
+    let cancelledSales = 0;
+    let activeSales = 0;
+
+    orders.forEach(order => {
+      const status =
+        String(order.status || "pending")
+          .toLowerCase();
+
+      const total =
+        Number(order.total || 0);
+
+      grossSales += total;
+
+      if (
+        status === "pending" ||
+        status === "placed"
+      ) {
+        pending++;
+      } else if (
+        status === "confirmed" ||
+        status === "packing" ||
+        status === "packed"
+      ) {
+        preparing++;
+      } else if (
+        status === "out_for_delivery"
+      ) {
+        delivery++;
+      } else if (
+        status === "delivered"
+      ) {
+        delivered++;
+        deliveredSales += total;
+      } else if (
+        status === "cancelled"
+      ) {
+        cancelled++;
+        cancelledSales += total;
+      }
+
+      if (status !== "cancelled") {
+        activeSales += total;
+      }
+    });
+
+    const setValue = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setValue("dashV5Pending", pending);
+    setValue("dashV5Preparing", preparing);
+    setValue("dashV5Delivery", delivery);
+    setValue("dashV5Delivered", delivered);
+    setValue("dashV5Cancelled", cancelled);
+
+    setValue(
+      "dashV5GrossSales",
+      `₹${grossSales.toFixed(2)}`
+    );
+
+    setValue(
+      "dashV5DeliveredSales",
+      `₹${deliveredSales.toFixed(2)}`
+    );
+
+    setValue(
+      "dashV5CancelledSales",
+      `₹${cancelledSales.toFixed(2)}`
+    );
+
+    setValue(
+      "dashV5ActiveSales",
+      `₹${activeSales.toFixed(2)}`
+    );
+  }
+
+  function injectStyles() {
+    if (
+      document.getElementById(
+        "delyvoDashboardV5Styles"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement("style");
+
+    style.id =
+      "delyvoDashboardV5Styles";
+
+    style.textContent = `
+      .delyvo-dashboard-v5 {
+        display: grid;
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .delyvo-status-breakdown,
+      .delyvo-sales-breakdown {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .delyvo-status-row,
+      .delyvo-sales-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 11px 0;
+        border-bottom: 1px solid #eee;
+        font-size: 13px;
+      }
+
+      .delyvo-status-row strong,
+      .delyvo-sales-row strong {
+        font-size: 14px;
+      }
+
+      .delyvo-sales-total {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 10px;
+        padding: 13px;
+        border-radius: 10px;
+        background: #f5f5f5;
+        font-weight: 700;
+      }
+
+      .delyvo-sales-total strong {
+        font-size: 16px;
+      }
+
+      @media (max-width: 700px) {
+        .delyvo-dashboard-v5 {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function init() {
+    injectStyles();
+
+    const dashboard =
+      document.getElementById(
+        "finalShopDashboard"
+      );
+
+    if (!dashboard) {
+      setTimeout(init, 500);
+      return;
+    }
+
+    renderBreakdown();
+  }
+
+  window.delyvoRefreshDashboardBreakdown =
+    updateBreakdown;
+
+  window.addEventListener("load", () => {
+    setTimeout(init, 1500);
+  });
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      setTimeout(init, 1500);
+    }
+  );
+
+  console.log(MARKER);
+  console.log("Order status breakdown : YES");
+  console.log("Sales breakdown : YES");
+  console.log("Cancelled tracking : YES");
+  console.log("Active order value : YES");
+  console.log("Existing dashboard preserved : YES");
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP DASHBOARD V6
+   COD Payment Summary
+   ========================================================= */
+(() => {
+  const MARKER = "DELYVO SHOP DASHBOARD V6";
+
+  function updateCODSummary() {
+    const orders = Array.isArray(window.delyvoShopOrders)
+      ? window.delyvoShopOrders
+      : [];
+
+    let codOrders = 0;
+    let codPendingOrders = 0;
+    let codPaidOrders = 0;
+
+    let codTotal = 0;
+    let codPendingAmount = 0;
+    let codPaidAmount = 0;
+
+    orders.forEach(order => {
+      const total = Number(order.total || 0);
+      const paymentStatus =
+        String(order.payment_status || "pending").toLowerCase();
+
+      if (
+        paymentStatus === "paid" ||
+        paymentStatus === "pending" ||
+        paymentStatus === "failed" ||
+        paymentStatus === "refunded"
+      ) {
+        codOrders++;
+        codTotal += total;
+      }
+
+      if (paymentStatus === "paid") {
+        codPaidOrders++;
+        codPaidAmount += total;
+      } else if (paymentStatus === "pending") {
+        codPendingOrders++;
+        codPendingAmount += total;
+      }
+    });
+
+    const setValue = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setValue("dashV6CODOrders", codOrders);
+    setValue("dashV6CODTotal", `₹${codTotal.toFixed(2)}`);
+    setValue("dashV6CODPendingOrders", codPendingOrders);
+    setValue("dashV6CODPendingAmount", `₹${codPendingAmount.toFixed(2)}`);
+    setValue("dashV6CODPaidOrders", codPaidOrders);
+    setValue("dashV6CODPaidAmount", `₹${codPaidAmount.toFixed(2)}`);
+  }
+
+  function renderCODSummary() {
+    const dashboard =
+      document.getElementById("finalShopDashboard");
+
+    if (!dashboard) return;
+
+    if (dashboard.querySelector(".delyvo-dashboard-v6")) {
+      updateCODSummary();
+      return;
+    }
+
+    const box = document.createElement("div");
+    box.className = "delyvo-dashboard-v6";
+
+    box.innerHTML = `
+      <div class="delyvo-dashboard-panel">
+        <div class="delyvo-dashboard-panel-head">
+          <div>
+            <h3>COD Payment Summary</h3>
+            <p>Cash on Delivery collection status</p>
+          </div>
+        </div>
+
+        <div class="delyvo-cod-grid">
+          <div class="delyvo-cod-card">
+            <span>COD Orders</span>
+            <strong id="dashV6CODOrders">0</strong>
+          </div>
+
+          <div class="delyvo-cod-card">
+            <span>Total COD Value</span>
+            <strong id="dashV6CODTotal">₹0.00</strong>
+          </div>
+
+          <div class="delyvo-cod-card">
+            <span>COD Pending</span>
+            <strong id="dashV6CODPendingOrders">0</strong>
+            <small id="dashV6CODPendingAmount">₹0.00</small>
+          </div>
+
+          <div class="delyvo-cod-card">
+            <span>COD Collected</span>
+            <strong id="dashV6CODPaidOrders">0</strong>
+            <small id="dashV6CODPaidAmount">₹0.00</small>
+          </div>
+        </div>
+      </div>
+    `;
+
+    dashboard.appendChild(box);
+    updateCODSummary();
+  }
+
+  function injectStyles() {
+    if (document.getElementById("delyvoDashboardV6Styles")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = "delyvoDashboardV6Styles";
+
+    style.textContent = `
+      .delyvo-dashboard-v6 {
+        margin-top: 18px;
+      }
+
+      .delyvo-cod-grid {
+        display: grid;
+        grid-template-columns:
+          repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .delyvo-cod-card {
+        padding: 15px;
+        border: 1px solid #eee;
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .delyvo-cod-card span {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 7px;
+        opacity: .75;
+      }
+
+      .delyvo-cod-card strong {
+        display: block;
+        font-size: 18px;
+      }
+
+      .delyvo-cod-card small {
+        display: block;
+        margin-top: 5px;
+        font-size: 12px;
+        opacity: .7;
+      }
+
+      @media (max-width: 800px) {
+        .delyvo-cod-grid {
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 480px) {
+        .delyvo-cod-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function init() {
+    injectStyles();
+
+    const dashboard =
+      document.getElementById("finalShopDashboard");
+
+    if (!dashboard) {
+      setTimeout(init, 500);
+      return;
+    }
+
+    renderCODSummary();
+  }
+
+  window.delyvoRefreshCODSummary =
+    updateCODSummary;
+
+  window.addEventListener("load", () => {
+    setTimeout(init, 1800);
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(init, 1800);
+  });
+
+  console.log(MARKER);
+  console.log("COD orders summary : YES");
+  console.log("COD total value : YES");
+  console.log("COD pending : YES");
+  console.log("COD collected : YES");
+  console.log("Existing dashboard preserved : YES");
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   DELYVO SHOP ORDERS FILTER V7
+   Search + Status Filter
+   ========================================================= */
+(() => {
+  const MARKER = "DELYVO SHOP ORDERS FILTER V7";
+
+  function getOrders() {
+    return Array.isArray(window.delyvoShopOrders)
+      ? window.delyvoShopOrders
+      : [];
+  }
+
+  function getOrderText(order) {
+    const address = order.addresses || order.address || {};
+
+    return [
+      order.order_number,
+      order.id,
+      order.status,
+      order.payment_status,
+      address.recipient_name,
+      address.phone,
+      address.address_line1,
+      address.address_line2,
+      address.city,
+      address.pincode
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
+  function applyOrderFilter() {
+    const orders = getOrders();
+
+    const search =
+      String(
+        document.getElementById("delyvoOrderSearch")?.value || ""
+      )
+        .trim()
+        .toLowerCase();
+
+    const status =
+      document.getElementById("delyvoOrderStatusFilter")?.value || "all";
+
+    const filtered = orders.filter(order => {
+      const text = getOrderText(order);
+
+      const searchMatch =
+        !search || text.includes(search);
+
+      const orderStatus =
+        String(order.status || "")
+          .toLowerCase();
+
+      const statusMatch =
+        status === "all" ||
+        orderStatus === status;
+
+      return searchMatch && statusMatch;
+    });
+
+    window.delyvoFilteredShopOrders = filtered;
+
+    const count =
+      document.getElementById("delyvoOrderFilterCount");
+
+    if (count) {
+      count.textContent =
+        `${filtered.length} order${filtered.length === 1 ? "" : "s"}`;
+    }
+
+    renderFilteredOrders(filtered);
+  }
+
+  function renderFilteredOrders(orders) {
+    const container =
+      document.getElementById("finalShopOrdersList");
+
+    if (!container) return;
+
+    const original =
+      window.renderFinalShopOrders;
+
+    if (typeof original !== "function") return;
+
+    const previousOrders =
+      window.delyvoShopOrders;
+
+    window.delyvoShopOrders = orders;
+
+    try {
+      original(orders);
+    } catch (error) {
+      console.error(
+        "DELYVO V7 ORDER FILTER RENDER ERROR:",
+        error
+      );
+    }
+
+    window.delyvoShopOrders = previousOrders;
+  }
+
+  function renderTools() {
+    const ordersSection =
+      document.getElementById("ordersSection");
+
+    if (!ordersSection) {
+      setTimeout(renderTools, 500);
+      return;
+    }
+
+    if (
+      document.getElementById("delyvoOrderToolsV7")
+    ) {
+      return;
+    }
+
+    const tools =
+      document.createElement("div");
+
+    tools.id =
+      "delyvoOrderToolsV7";
+
+    tools.innerHTML = `
+      <div class="delyvo-order-tools-v7">
+
+        <div class="delyvo-order-search-v7">
+          <input
+            id="delyvoOrderSearch"
+            type="search"
+            placeholder="Search order, customer, phone..."
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="delyvo-order-filter-v7">
+          <select id="delyvoOrderStatusFilter">
+            <option value="all">All Orders</option>
+            <option value="pending">New / Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="packing">Packing</option>
+            <option value="packed">Ready</option>
+            <option value="out_for_delivery">
+              Out for Delivery
+            </option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div
+          id="delyvoOrderFilterCount"
+          class="delyvo-order-filter-count-v7"
+        >
+          0 orders
+        </div>
+
+        <button
+          id="delyvoOrderFilterClear"
+          type="button"
+          class="delyvo-order-clear-v7"
+        >
+          Clear
+        </button>
+
+      </div>
+    `;
+
+    ordersSection.insertBefore(
+      tools,
+      ordersSection.firstChild
+    );
+
+    const search =
+      document.getElementById(
+        "delyvoOrderSearch"
+      );
+
+    const filter =
+      document.getElementById(
+        "delyvoOrderStatusFilter"
+      );
+
+    const clear =
+      document.getElementById(
+        "delyvoOrderFilterClear"
+      );
+
+    search?.addEventListener(
+      "input",
+      applyOrderFilter
+    );
+
+    filter?.addEventListener(
+      "change",
+      applyOrderFilter
+    );
+
+    clear?.addEventListener(
+      "click",
+      () => {
+        if (search) search.value = "";
+        if (filter) filter.value = "all";
+        applyOrderFilter();
+      }
+    );
+
+    applyOrderFilter();
+  }
+
+  function injectStyles() {
+    if (
+      document.getElementById(
+        "delyvoOrdersV7Styles"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement("style");
+
+    style.id =
+      "delyvoOrdersV7Styles";
+
+    style.textContent = `
+      .delyvo-order-tools-v7 {
+        display: grid;
+        grid-template-columns:
+          minmax(220px, 1fr)
+          220px
+          auto
+          auto;
+        gap: 10px;
+        align-items: center;
+        margin: 0 0 16px;
+        padding: 12px;
+        border: 1px solid #eee;
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .delyvo-order-search-v7 input,
+      .delyvo-order-filter-v7 select {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 42px;
+        padding: 9px 11px;
+        border: 1px solid #ddd;
+        border-radius: 9px;
+        background: #fff;
+        font-size: 13px;
+      }
+
+      .delyvo-order-filter-count-v7 {
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .delyvo-order-clear-v7 {
+        min-height: 42px;
+        padding: 0 15px;
+        border: 1px solid #ddd;
+        border-radius: 9px;
+        background: #fff;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .delyvo-order-clear-v7:hover {
+        opacity: .8;
+      }
+
+      @media (max-width: 800px) {
+        .delyvo-order-tools-v7 {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .delyvo-order-filter-count-v7 {
+          grid-column: span 1;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .delyvo-order-tools-v7 {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function init() {
+    injectStyles();
+    renderTools();
+  }
+
+  window.delyvoApplyOrderFilterV7 =
+    applyOrderFilter;
+
+  window.delyvoRefreshOrderFilterV7 =
+    applyOrderFilter;
+
+  window.addEventListener("load", () => {
+    setTimeout(init, 1800);
+  });
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      setTimeout(init, 1800);
+    }
+  );
+
+  console.log(MARKER);
+  console.log("Order search : YES");
+  console.log("Status filter : YES");
+  console.log("Clear filter : YES");
+  console.log("Customer search : YES");
+  console.log("Phone search : YES");
+  console.log("Existing order actions preserved : YES");
+})();
+</script>
+
+
+<!-- DELYVO SHOP ORDER AUTO SYNC V65 -->
+<script>
+(function () {
+  "use strict";
+
+  let v65Busy = false;
+  let v65Timer = null;
+
+  async function syncShopOrdersV65() {
+    if (v65Busy) return;
+    v65Busy = true;
+
+    try {
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      } else if (typeof window.loadShop === "function") {
+        await window.loadShop();
+      }
+
+      if (typeof window.loadFinalShopDashboard === "function") {
+        await window.loadFinalShopDashboard();
+      }
+
+      if (typeof window.delyvoRefreshDashboardSummary === "function") {
+        await window.delyvoRefreshDashboardSummary();
+      }
+
+      window.dispatchEvent(new CustomEvent("delyvoShopOrdersSynced", {
+        detail: {
+          reason: "auto_refresh"
+        }
+      }));
+    } catch (e) {
+      console.warn("DELYVO V65 shop order sync failed:", e);
+    } finally {
+      v65Busy = false;
+    }
+  }
+
+  function startShopOrderSyncV65() {
+    if (v65Timer) return;
+
+    v65Timer = setInterval(function () {
+      syncShopOrdersV65();
+    }, 30000);
+
+    window.delyvoShopOrderSyncTimerV65 = v65Timer;
+  }
+
+  function stopShopOrderSyncV65() {
+    if (!v65Timer) return;
+
+    clearInterval(v65Timer);
+    v65Timer = null;
+    window.delyvoShopOrderSyncTimerV65 = null;
+  }
+
+  window.delyvoSyncShopOrdersV65 = syncShopOrdersV65;
+  window.delyvoStartShopOrderSyncV65 = startShopOrderSyncV65;
+  window.delyvoStopShopOrderSyncV65 = stopShopOrderSyncV65;
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      stopShopOrderSyncV65();
+    } else {
+      syncShopOrdersV65();
+      startShopOrderSyncV65();
+    }
+  });
+
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(function () {
+      syncShopOrdersV65();
+      startShopOrderSyncV65();
+    }, 2500);
+  });
+
+  console.log("DELYVO SHOP ORDER AUTO SYNC V65 ADDED");
+})();
+</script>
+<!-- END DELYVO SHOP ORDER AUTO SYNC V65 -->
+
+
+<!-- DELYVO SHOP NEW ORDER ALERT V66 -->
+<script>
+(function () {
+  "use strict";
+
+  let previousPendingCountV66 = null;
+  let firstCheckV66 = true;
+
+  function getShopOrdersV66() {
+    const orders =
+      window.delyvoShopOrders ||
+      window.shopOrders ||
+      [];
+
+    return Array.isArray(orders) ? orders : [];
+  }
+
+  function getPendingCountV66() {
+    return getShopOrdersV66().filter(function (order) {
+      const status = String(order.status || "").toLowerCase();
+      return status === "pending" || status === "placed";
+    }).length;
+  }
+
+  function showNewOrderAlertV66(count) {
+    let alertBox = document.getElementById("delyvoNewOrderAlertV66");
+
+    if (!alertBox) {
+      alertBox = document.createElement("div");
+      alertBox.id = "delyvoNewOrderAlertV66";
+
+      alertBox.innerHTML =
+        '<div class="delyvo-new-order-v66-title">New Order</div>' +
+        '<div class="delyvo-new-order-v66-count"></div>' +
+        '<button type="button" class="delyvo-new-order-v66-btn">View Orders</button>';
+
+      document.body.appendChild(alertBox);
+
+      const button = alertBox.querySelector(
+        ".delyvo-new-order-v66-btn"
+      );
+
+      if (button) {
+        button.addEventListener("click", function () {
+          alertBox.remove();
+
+          const ordersSection =
+            document.getElementById("ordersSection");
+
+          if (ordersSection) {
+            ordersSection.scrollIntoView({
+              behavior: "smooth",
+              block: "start"
+            });
+          }
+        });
+      }
+    }
+
+    const countBox = alertBox.querySelector(
+      ".delyvo-new-order-v66-count"
+    );
+
+    if (countBox) {
+      countBox.textContent =
+        count + (count === 1 ? " new order" : " new orders");
+    }
+
+    alertBox.classList.add("delyvo-new-order-v66-show");
+
+    setTimeout(function () {
+      if (alertBox && alertBox.parentNode) {
+        alertBox.classList.remove("delyvo-new-order-v66-show");
+      }
+    }, 8000);
+  }
+
+  function checkNewOrdersV66() {
+    const pendingCount = getPendingCountV66();
+
+    if (firstCheckV66) {
+      previousPendingCountV66 = pendingCount;
+      firstCheckV66 = false;
+      return;
+    }
+
+    if (
+      previousPendingCountV66 !== null &&
+      pendingCount > previousPendingCountV66
+    ) {
+      showNewOrderAlertV66(
+        pendingCount - previousPendingCountV66
+      );
+    }
+
+    previousPendingCountV66 = pendingCount;
+
+    const badge =
+      document.getElementById("delyvoPendingOrderCountV66");
+
+    if (badge) {
+      badge.textContent = String(pendingCount);
+      badge.hidden = pendingCount === 0;
+    }
+  }
+
+  function addPendingBadgeV66() {
+    const ordersSection =
+      document.getElementById("ordersSection");
+
+    if (!ordersSection) return;
+
+    let badge = document.getElementById(
+      "delyvoPendingOrderCountV66"
+    );
+
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "delyvoPendingOrderCountV66";
+      badge.className = "delyvo-pending-order-count-v66";
+      badge.hidden = true;
+
+      const heading =
+        ordersSection.querySelector("h1, h2, h3, .section-title");
+
+      if (heading) {
+        heading.appendChild(badge);
+      } else {
+        ordersSection.insertBefore(
+          badge,
+          ordersSection.firstChild
+        );
+      }
+    }
+
+    checkNewOrdersV66();
+  }
+
+  window.delyvoCheckNewOrdersV66 = checkNewOrdersV66;
+
+  const style = document.createElement("style");
+  style.id = "delyvoShopNewOrderAlertV66Styles";
+
+  style.textContent = `
+    #delyvoNewOrderAlertV66 {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      z-index: 99999;
+      width: min(330px, calc(100vw - 40px));
+      padding: 16px;
+      border-radius: 14px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 14px 40px rgba(0,0,0,.16);
+      transform: translateY(-140px);
+      opacity: 0;
+      pointer-events: none;
+      transition: .25s ease;
+    }
+
+    #delyvoNewOrderAlertV66.delyvo-new-order-v66-show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .delyvo-new-order-v66-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .delyvo-new-order-v66-count {
+      margin-top: 5px;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .delyvo-new-order-v66-btn {
+      margin-top: 12px;
+      width: 100%;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 9px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .delyvo-pending-order-count-v66 {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      margin-left: 8px;
+      padding: 0 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #ef4444;
+      color: #fff;
+      vertical-align: middle;
+    }
+
+    @media (max-width: 600px) {
+      #delyvoNewOrderAlertV66 {
+        right: 10px;
+        top: 10px;
+        width: calc(100vw - 20px);
+      }
+    }
+  `;
+
+  if (!document.getElementById(
+    "delyvoShopNewOrderAlertV66Styles"
+  )) {
+    document.head.appendChild(style);
+  }
+
+  document.addEventListener("delyvoShopOrdersSynced", function () {
+    setTimeout(function () {
+      checkNewOrdersV66();
+      addPendingBadgeV66();
+    }, 100);
+  });
+
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(function () {
+      addPendingBadgeV66();
+      checkNewOrdersV66();
+    }, 3000);
+  });
+
+  console.log("DELYVO SHOP NEW ORDER ALERT V66 ADDED");
+})();
+</script>
+<!-- END DELYVO SHOP NEW ORDER ALERT V66 -->
+
+
+<!-- DELYVO SHOP ORDER STATUS FLOW V67 -->
+<script>
+(function () {
+  "use strict";
+
+  const STATUS_FLOW_V67 = {
+    pending: {
+      next: "confirmed",
+      label: "Accept Order"
+    },
+    placed: {
+      next: "confirmed",
+      label: "Accept Order"
+    },
+    confirmed: {
+      next: "packing",
+      label: "Start Packing"
+    },
+    packing: {
+      next: "packed",
+      label: "Mark Ready"
+    },
+    packed: {
+      next: "out_for_delivery",
+      label: "Send for Delivery"
+    },
+    out_for_delivery: {
+      next: "delivered",
+      label: "Mark Delivered"
+    }
+  };
+
+  function getNextStatusV67(status) {
+    const key = String(status || "").toLowerCase();
+    return STATUS_FLOW_V67[key] || null;
+  }
+
+  async function updateOrderStatusV67(orderId, currentStatus) {
+    const flow = getNextStatusV67(currentStatus);
+
+    if (!flow || !orderId) {
+      return false;
+    }
+
+    if (typeof window.updateShopOrderStatus === "function") {
+      await window.updateShopOrderStatus(
+        orderId,
+        flow.next
+      );
+
+      window.dispatchEvent(new CustomEvent("delyvoShopOrderStatusChanged", {
+        detail: {
+          orderId: orderId,
+          oldStatus: currentStatus,
+          newStatus: flow.next
+        }
+      }));
+
+      return true;
+    }
+
+    return false;
+  }
+
+  function getStatusActionV67(status, orderId) {
+    const flow = getNextStatusV67(status);
+
+    if (!flow) return "";
+
+    return (
+      '<button type="button" ' +
+      'class="delyvo-shop-status-btn-v67" ' +
+      'data-order-id="' + String(orderId || "") + '" ' +
+      'data-current-status="' + String(status || "") + '">' +
+      flow.label +
+      '</button>'
+    );
+  }
+
+  window.delyvoGetNextStatusV67 = getNextStatusV67;
+  window.delyvoUpdateOrderStatusV67 = updateOrderStatusV67;
+  window.delyvoGetStatusActionV67 = getStatusActionV67;
+
+  document.addEventListener("click", async function (event) {
+    const button = event.target.closest(
+      ".delyvo-shop-status-btn-v67"
+    );
+
+    if (!button) return;
+
+    const orderId = button.getAttribute("data-order-id");
+    const currentStatus = button.getAttribute(
+      "data-current-status"
+    );
+
+    if (!orderId || !currentStatus) return;
+
+    button.disabled = true;
+    button.textContent = "Updating...";
+
+    try {
+      await updateOrderStatusV67(
+        orderId,
+        currentStatus
+      );
+    } catch (e) {
+      console.error(
+        "DELYVO V67 status update failed:",
+        e
+      );
+
+      button.disabled = false;
+
+      const flow = getNextStatusV67(currentStatus);
+      button.textContent = flow
+        ? flow.label
+        : "Update";
+    }
+  });
+
+  document.addEventListener(
+    "delyvoShopOrdersSynced",
+    function () {
+      window.dispatchEvent(
+        new CustomEvent("delyvoShopStatusFlowReady", {
+          detail: {
+            flow: STATUS_FLOW_V67
+          }
+        })
+      );
+    }
+  );
+
+  console.log("DELYVO SHOP ORDER STATUS FLOW V67 ADDED");
+})();
+</script>
+<!-- END DELYVO SHOP ORDER STATUS FLOW V67 -->
+
+
+<!-- DELYVO SHOP ORDER DETAILS SYNC V68 -->
+<script>
+(function () {
+  "use strict";
+
+  let activeOrderIdV68 = null;
+
+  function refreshActiveOrderDetailsV68() {
+    if (!activeOrderIdV68) return;
+
+    try {
+      if (typeof window.openShopOrderDetails === "function") {
+        window.openShopOrderDetails(activeOrderIdV68);
+      }
+    } catch (e) {
+      console.warn(
+        "DELYVO V68 order details refresh failed:",
+        e
+      );
+    }
+  }
+
+  function rememberOrderV68(orderId) {
+    if (!orderId) return;
+
+    activeOrderIdV68 = orderId;
+
+    try {
+      sessionStorage.setItem(
+        "delyvo_active_shop_order_v68",
+        orderId
+      );
+    } catch (e) {}
+  }
+
+  function restoreOrderV68() {
+    if (activeOrderIdV68) return;
+
+    try {
+      activeOrderIdV68 =
+        sessionStorage.getItem(
+          "delyvo_active_shop_order_v68"
+        ) || null;
+    } catch (e) {}
+  }
+
+  window.delyvoRememberShopOrderV68 = rememberOrderV68;
+  window.delyvoRefreshShopOrderDetailsV68 =
+    refreshActiveOrderDetailsV68;
+
+  document.addEventListener("click", function (event) {
+    const button = event.target.closest(
+      ".shop-details-btn"
+    );
+
+    if (!button) return;
+
+    const onclickValue =
+      button.getAttribute("onclick") || "";
+
+    const match =
+      onclickValue.match(
+        /openShopOrderDetails\(['"]([^'"]+)['"]\)/
+      );
+
+    if (match && match[1]) {
+      rememberOrderV68(match[1]);
+    }
+  });
+
+  document.addEventListener(
+    "delyvoShopOrderStatusChanged",
+    function (event) {
+      const orderId =
+        event.detail && event.detail.orderId;
+
+      if (orderId) {
+        rememberOrderV68(orderId);
+      }
+
+      setTimeout(
+        refreshActiveOrderDetailsV68,
+        350
+      );
+    }
+  );
+
+  document.addEventListener(
+    "delyvoShopOrdersSynced",
+    function () {
+      restoreOrderV68();
+
+      if (activeOrderIdV68) {
+        setTimeout(
+          refreshActiveOrderDetailsV68,
+          150
+        );
+      }
+    }
+  );
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      restoreOrderV68();
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP ORDER DETAILS SYNC V68 ADDED"
+  );
+})();
+</script>
+<!-- END DELYVO SHOP ORDER DETAILS SYNC V68 -->
+
+
+<!-- DELYVO SHOP STATUS BUTTON CONNECT V69 -->
+<script>
+(function () {
+  "use strict";
+
+  function getFlowV69(status) {
+    if (typeof window.delyvoGetNextStatusV67 === "function") {
+      return window.delyvoGetNextStatusV67(status);
+    }
+
+    const flow = {
+      pending: {
+        next: "confirmed",
+        label: "Accept Order"
+      },
+      placed: {
+        next: "confirmed",
+        label: "Accept Order"
+      },
+      confirmed: {
+        next: "packing",
+        label: "Start Packing"
+      },
+      packing: {
+        next: "packed",
+        label: "Mark Ready"
+      },
+      packed: {
+        next: "out_for_delivery",
+        label: "Send for Delivery"
+      },
+      out_for_delivery: {
+        next: "delivered",
+        label: "Mark Delivered"
+      }
+    };
+
+    return flow[String(status || "").toLowerCase()] || null;
+  }
+
+  function buildStatusButtonV69(orderId, status) {
+    const flow = getFlowV69(status);
+
+    if (!flow || !orderId) return "";
+
+    return (
+      '<button type="button" ' +
+      'class="delyvo-shop-status-btn-v67" ' +
+      'data-order-id="' + String(orderId) + '" ' +
+      'data-current-status="' + String(status || "") + '">' +
+      flow.label +
+      '</button>'
+    );
+  }
+
+  function connectStatusButtonsV69() {
+    const cards = document.querySelectorAll(
+      ".shop-order, .shop-order-card, .final-shop-order, [data-order-id]"
+    );
+
+    cards.forEach(function (card) {
+      if (card.dataset.delyvoStatusV69 === "1") {
+        return;
+      }
+
+      const orderId =
+        card.getAttribute("data-order-id");
+
+      if (!orderId) return;
+
+      let status =
+        card.getAttribute("data-status") || "";
+
+      if (!status) {
+        const statusElement =
+          card.querySelector(
+            ".order-status, .shop-order-status, [data-status]"
+          );
+
+        if (statusElement) {
+          status =
+            statusElement.getAttribute("data-status") ||
+            statusElement.textContent ||
+            "";
+        }
+      }
+
+      status = String(status)
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, "_");
+
+      const flow = getFlowV69(status);
+
+      if (!flow) return;
+
+      const existing =
+        card.querySelector(
+          ".delyvo-shop-status-btn-v67"
+        );
+
+      if (!existing) {
+        const wrapper =
+          card.querySelector(
+            ".shop-order-actions, .order-actions, .shop-actions"
+          );
+
+        if (wrapper) {
+          wrapper.insertAdjacentHTML(
+            "beforeend",
+            buildStatusButtonV69(
+              orderId,
+              status
+            )
+          );
+        }
+      }
+
+      card.dataset.delyvoStatusV69 = "1";
+    });
+  }
+
+  window.delyvoConnectShopStatusButtonsV69 =
+    connectStatusButtonsV69;
+
+  document.addEventListener(
+    "delyvoShopOrdersSynced",
+    function () {
+      setTimeout(
+        connectStatusButtonsV69,
+        150
+      );
+    }
+  );
+
+  document.addEventListener(
+    "delyvoShopOrderStatusChanged",
+    function () {
+      setTimeout(
+        connectStatusButtonsV69,
+        200
+      );
+    }
+  );
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      setTimeout(
+        connectStatusButtonsV69,
+        1200
+      );
+    }
+  );
+
+  const observer =
+    new MutationObserver(function () {
+      connectStatusButtonsV69();
+    });
+
+  observer.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP STATUS BUTTON CONNECT V69 ADDED"
+  );
+})();
+</script>
+<!-- END DELYVO SHOP STATUS BUTTON CONNECT V69 -->
+
+
+<!-- DELYVO SHOP STATUS BUTTON STYLE V70 -->
+<style id="delyvoShopStatusStyleV70">
+  .delyvo-shop-status-btn-v67 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 16px;
+    margin: 6px 4px 6px 0;
+    border: 0;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      transform 0.15s ease,
+      opacity 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .delyvo-shop-status-btn-v67:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  .delyvo-shop-status-btn-v67:active {
+    transform: translateY(0);
+  }
+
+  .delyvo-shop-status-btn-v67:disabled {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .delyvo-shop-status-btn-v67[data-current-status="pending"],
+  .delyvo-shop-status-btn-v67[data-current-status="placed"] {
+    background: #111827;
+    color: #ffffff;
+  }
+
+  .delyvo-shop-status-btn-v67[data-current-status="confirmed"],
+  .delyvo-shop-status-btn-v67[data-current-status="packing"] {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .delyvo-shop-status-btn-v67[data-current-status="packed"] {
+    background: #7c3aed;
+    color: #ffffff;
+  }
+
+  .delyvo-shop-status-btn-v67[data-current-status="out_for_delivery"] {
+    background: #059669;
+    color: #ffffff;
+  }
+
+  @media (max-width: 640px) {
+    .delyvo-shop-status-btn-v67 {
+      width: 100%;
+      min-height: 44px;
+      margin: 6px 0;
+      font-size: 14px;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  function refreshStatusButtonStyleV70() {
+    document
+      .querySelectorAll(".delyvo-shop-status-btn-v67")
+      .forEach(function (button) {
+        const status =
+          String(
+            button.getAttribute("data-current-status") || ""
+          )
+            .toLowerCase()
+            .trim();
+
+        button.setAttribute(
+          "aria-label",
+          button.textContent.trim() +
+            " for order " +
+            (button.getAttribute("data-order-id") || "")
+        );
+
+        button.dataset.statusStyleV70 = status;
+      });
+  }
+
+  window.delyvoRefreshStatusButtonStyleV70 =
+    refreshStatusButtonStyleV70;
+
+  document.addEventListener(
+    "delyvoShopOrdersSynced",
+    function () {
+      setTimeout(
+        refreshStatusButtonStyleV70,
+        100
+      );
+    }
+  );
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      setTimeout(
+        refreshStatusButtonStyleV70,
+        1000
+      );
+    }
+  );
+
+  const observer =
+    new MutationObserver(function () {
+      refreshStatusButtonStyleV70();
+    });
+
+  observer.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP STATUS BUTTON STYLE V70 ADDED"
+  );
+})();
+</script>
+<!-- END DELYVO SHOP STATUS BUTTON STYLE V70 -->
+
+
+<!-- DELYVO SHOP STATUS REFRESH V71 -->
+<script>
+(function () {
+  "use strict";
+
+  let refreshingV71 = false;
+
+  async function refreshShopAfterStatusV71() {
+    if (refreshingV71) return;
+
+    refreshingV71 = true;
+
+    try {
+      if (typeof window.loadShopOrders === "function") {
+        await window.loadShopOrders();
+      } else if (typeof window.loadShop === "function") {
+        await window.loadShop();
+      }
+
+      if (
+        typeof window.loadFinalShopDashboard === "function"
+      ) {
+        await window.loadFinalShopDashboard();
+      }
+
+      if (
+        typeof window.delyvoRefreshDashboardSummary ===
+        "function"
+      ) {
+        await window.delyvoRefreshDashboardSummary();
+      }
+
+      window.dispatchEvent(
+        new CustomEvent("delyvoShopStatusRefreshComplete", {
+          detail: {
+            refreshed: true
+          }
+        })
+      );
+    } catch (e) {
+      console.error(
+        "DELYVO V71 status refresh failed:",
+        e
+      );
+    } finally {
+      refreshingV71 = false;
+    }
+  }
+
+  window.delyvoRefreshShopAfterStatusV71 =
+    refreshShopAfterStatusV71;
+
+  document.addEventListener(
+    "delyvoShopOrderStatusChanged",
+    function () {
+      setTimeout(
+        refreshShopAfterStatusV71,
+        400
+      );
+    }
+  );
+
+  document.addEventListener(
+    "delyvoShopStatusRefreshComplete",
+    function () {
+      if (
+        typeof window.delyvoRefreshStatusButtonStyleV70 ===
+        "function"
+      ) {
+        window.delyvoRefreshStatusButtonStyleV70();
+      }
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP STATUS REFRESH V71 ADDED"
+  );
+})();
+</script>
+<!-- END DELYVO SHOP STATUS REFRESH V71 -->
+
+
+<!-- DELYVO SHOP ORDER STATUS HISTORY V72 -->
+<script>
+(function () {
+  "use strict";
+
+  const STATUS_LABELS_V72 = {
+    pending: "Order Received",
+    placed: "Order Received",
+    confirmed: "Order Confirmed",
+    packing: "Packing",
+    packed: "Ready",
+    out_for_delivery: "Out for Delivery",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+    refunded: "Refunded"
+  };
+
+  function statusLabelV72(status) {
+    const key =
+      String(status || "")
+        .toLowerCase()
+        .trim();
+
+    return STATUS_LABELS_V72[key] || status || "Unknown";
+  }
+
+  function getOrderFromCacheV72(orderId) {
+    const orders =
+      window.delyvoShopOrders ||
+      window.shopOrders ||
+      [];
+
+    return orders.find(function (order) {
+      return String(order.id) === String(orderId);
+    }) || null;
+  }
+
+  function renderStatusHistoryV72(orderId) {
+    const order =
+      getOrderFromCacheV72(orderId);
+
+    if (!order) return "";
+
+    const currentStatus =
+      String(order.status || "")
+        .toLowerCase()
+        .trim();
+
+    const steps = [
+      "pending",
+      "confirmed",
+      "packing",
+      "packed",
+      "out_for_delivery",
+      "delivered"
+    ];
+
+    const currentIndex =
+      steps.indexOf(currentStatus);
+
+    let html =
+      '<div class="delyvo-status-history-v72">' +
+      '<div class="delyvo-status-history-title-v72">' +
+      'Order Status' +
+      '</div>';
+
+    steps.forEach(function (status, index) {
+      let state = "upcoming";
+
+      if (
+        currentStatus === "cancelled" ||
+        currentStatus === "refunded"
+      ) {
+        state = "cancelled";
+      } else if (index < currentIndex) {
+        state = "completed";
+      } else if (index === currentIndex) {
+        state = "current";
+      }
+
+      html +=
+        '<div class="delyvo-status-history-row-v72 ' +
+        state +
+        '">' +
+        '<span class="delyvo-status-dot-v72"></span>' +
+        '<span class="delyvo-status-name-v72">' +
+        statusLabelV72(status) +
+        '</span>' +
+        '</div>';
+    });
+
+    if (
+      currentStatus === "cancelled" ||
+      currentStatus === "refunded"
+    ) {
+      html +=
+        '<div class="delyvo-status-history-row-v72 cancelled">' +
+        '<span class="delyvo-status-dot-v72"></span>' +
+        '<span class="delyvo-status-name-v72">' +
+        statusLabelV72(currentStatus) +
+        '</span>' +
+        '</div>';
+    }
+
+    html += "</div>";
+
+    return html;
+  }
+
+  function addStatusHistoryV72(orderId) {
+    const modal =
+      document.getElementById(
+        "delyvoShopOrderDetails"
+      );
+
+    if (!modal || !orderId) return;
+
+    const existing =
+      modal.querySelector(
+        ".delyvo-status-history-v72"
+      );
+
+    if (existing) {
+      existing.remove();
+    }
+
+    const history =
+      renderStatusHistoryV72(orderId);
+
+    if (!history) return;
+
+    const target =
+      modal.querySelector(
+        ".sod-status, .sod-body, .sod-content"
+      );
+
+    if (target) {
+      target.insertAdjacentHTML(
+        "afterend",
+        history
+      );
+    } else {
+      modal.insertAdjacentHTML(
+        "beforeend",
+        history
+      );
+    }
+  }
+
+  window.delyvoRenderStatusHistoryV72 =
+    renderStatusHistoryV72;
+
+  window.delyvoAddStatusHistoryV72 =
+    addStatusHistoryV72;
+
+  document.addEventListener(
+    "delyvoShopOrderStatusChanged",
+    function (event) {
+      const orderId =
+        event.detail &&
+        event.detail.orderId;
+
+      if (!orderId) return;
+
+      setTimeout(function () {
+        addStatusHistoryV72(orderId);
+      }, 500);
+    }
+  );
+
+  document.addEventListener(
+    "delyvoShopStatusRefreshComplete",
+    function () {
+      const modal =
+        document.getElementById(
+          "delyvoShopOrderDetails"
+        );
+
+      if (!modal) return;
+
+      const orderId =
+        modal.getAttribute(
+          "data-order-id"
+        );
+
+      if (orderId) {
+        addStatusHistoryV72(orderId);
+      }
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP ORDER STATUS HISTORY V72 ADDED"
+  );
+})();
+</script>
+
+<style id="delyvoShopStatusHistoryStyleV72">
+  .delyvo-status-history-v72 {
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #ffffff;
+  }
+
+  .delyvo-status-history-title-v72 {
+    margin-bottom: 12px;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .delyvo-status-history-row-v72 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    font-size: 14px;
+    color: #9ca3af;
+  }
+
+  .delyvo-status-dot-v72 {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    background: #d1d5db;
+  }
+
+  .delyvo-status-history-row-v72.completed {
+    color: #059669;
+  }
+
+  .delyvo-status-history-row-v72.completed
+  .delyvo-status-dot-v72 {
+    background: #059669;
+  }
+
+  .delyvo-status-history-row-v72.current {
+    color: #2563eb;
+    font-weight: 700;
+  }
+
+  .delyvo-status-history-row-v72.current
+  .delyvo-status-dot-v72 {
+    background: #2563eb;
+  }
+
+  .delyvo-status-history-row-v72.cancelled {
+    color: #dc2626;
+    font-weight: 700;
+  }
+
+  .delyvo-status-history-row-v72.cancelled
+  .delyvo-status-dot-v72 {
+    background: #dc2626;
+  }
+
+  .delyvo-status-history-row-v72.upcoming {
+    color: #9ca3af;
+  }
+</style>
+<!-- END DELYVO SHOP ORDER STATUS HISTORY V72 -->
+
+
+<!-- DELYVO SHOP ORDER STATUS HISTORY DB V73 -->
+<script>
+(function () {
+  "use strict";
+
+  const SUPABASE_URL_V73 =
+    window.SHOP_SUPABASE_URL ||
+    "https://unwdkreujyejgcucgttj.supabase.co";
+
+  const SUPABASE_KEY_V73 =
+    window.SHOP_SUPABASE_KEY ||
+    "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  function getShopTokenV73() {
+    return (
+      localStorage.getItem("delyvo_shop_token") ||
+      localStorage.getItem("delyvo_access_token") ||
+      ""
+    );
+  }
+
+  async function loadOrderStatusHistoryV73(orderId) {
+    if (!orderId) return [];
+
+    const token = getShopTokenV73();
+
+    if (!token) return [];
+
+    const url =
+      SUPABASE_URL_V73 +
+      "/rest/v1/order_status_history" +
+      "?select=*" +
+      "&order_id=eq." +
+      encodeURIComponent(orderId) +
+      "&order=created_at.asc";
+
+    try {
+      const response =
+        await fetch(url, {
+          headers: {
+            apikey: SUPABASE_KEY_V73,
+            Authorization: "Bearer " + token,
+            "Content-Type": "application/json"
+          }
+        });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data =
+        await response.json();
+
+      return Array.isArray(data)
+        ? data
+        : [];
+    } catch (e) {
+      console.warn(
+        "DELYVO V73 history load failed:",
+        e
+      );
+
+      return [];
+    }
+  }
+
+  function statusLabelV73(status) {
+    const map = {
+      placed: "Order Received",
+      pending: "Order Received",
+      confirmed: "Order Confirmed",
+      packing: "Packing",
+      packed: "Ready",
+      out_for_delivery: "Out for Delivery",
+      delivered: "Delivered",
+      cancelled: "Cancelled",
+      refunded: "Refunded"
+    };
+
+    return (
+      map[String(status || "").toLowerCase()] ||
+      status ||
+      "Unknown"
+    );
+  }
+
+  function formatHistoryTimeV73(value) {
+    if (!value) return "";
+
+    try {
+      return new Date(value).toLocaleString(
+        "en-IN",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        }
+      );
+    } catch (e) {
+      return "";
+    }
+  }
+
+  async function renderDbStatusHistoryV73(orderId) {
+    const modal =
+      document.getElementById(
+        "delyvoShopOrderDetails"
+      );
+
+    if (!modal || !orderId) return;
+
+    const history =
+      await loadOrderStatusHistoryV73(
+        orderId
+      );
+
+    let box =
+      modal.querySelector(
+        ".delyvo-db-status-history-v73"
+      );
+
+    if (!box) {
+      box =
+        document.createElement("div");
+
+      box.className =
+        "delyvo-db-status-history-v73";
+
+      modal.appendChild(box);
+    }
+
+    if (!history.length) {
+      box.innerHTML =
+        '<div class="delyvo-db-history-title-v73">' +
+        'Status History' +
+        '</div>' +
+        '<div class="delyvo-db-history-empty-v73">' +
+        'Status history will appear here.' +
+        '</div>';
+
+      return;
+    }
+
+    let html =
+      '<div class="delyvo-db-history-title-v73">' +
+      'Status History' +
+      '</div>';
+
+    history.forEach(function (item) {
+      const status =
+        item.new_status ||
+        item.status ||
+        "";
+
+      html +=
+        '<div class="delyvo-db-history-row-v73">' +
+        '<div class="delyvo-db-history-dot-v73"></div>' +
+        '<div class="delyvo-db-history-main-v73">' +
+        '<div class="delyvo-db-history-status-v73">' +
+        statusLabelV73(status) +
+        '</div>' +
+        '<div class="delyvo-db-history-time-v73">' +
+        formatHistoryTimeV73(
+          item.created_at ||
+          item.updated_at
+        ) +
+        '</div>' +
+        '</div>' +
+        '</div>';
+    });
+
+    box.innerHTML = html;
+  }
+
+  window.delyvoLoadOrderStatusHistoryV73 =
+    loadOrderStatusHistoryV73;
+
+  window.delyvoRenderDbStatusHistoryV73 =
+    renderDbStatusHistoryV73;
+
+  document.addEventListener(
+    "delyvoShopOrderStatusChanged",
+    function (event) {
+      const orderId =
+        event.detail &&
+        event.detail.orderId;
+
+      if (!orderId) return;
+
+      setTimeout(function () {
+        renderDbStatusHistoryV73(
+          orderId
+        );
+      }, 700);
+    }
+  );
+
+  document.addEventListener(
+    "delyvoShopStatusRefreshComplete",
+    function () {
+      const modal =
+        document.getElementById(
+          "delyvoShopOrderDetails"
+        );
+
+      if (!modal) return;
+
+      const orderId =
+        modal.getAttribute(
+          "data-order-id"
+        );
+
+      if (orderId) {
+        renderDbStatusHistoryV73(
+          orderId
+        );
+      }
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP ORDER STATUS HISTORY DB V73 ADDED"
+  );
+})();
+</script>
+
+<style id="delyvoShopStatusHistoryDbStyleV73">
+  .delyvo-db-status-history-v73 {
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #ffffff;
+  }
+
+  .delyvo-db-history-title-v73 {
+    margin-bottom: 14px;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .delyvo-db-history-row-v73 {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+  }
+
+  .delyvo-db-history-dot-v73 {
+    width: 9px;
+    height: 9px;
+    margin-top: 5px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    background: #2563eb;
+  }
+
+  .delyvo-db-history-status-v73 {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .delyvo-db-history-time-v73 {
+    margin-top: 3px;
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .delyvo-db-history-empty-v73 {
+    font-size: 13px;
+    color: #6b7280;
+  }
+</style>
+<!-- END DELYVO SHOP ORDER STATUS HISTORY DB V73 -->
+
+
+<!-- DELYVO SHOP NEW ORDER NOTIFICATION V74 -->
+<script>
+(function () {
+  "use strict";
+
+  let lastPendingCountV74 = null;
+  let notificationTimerV74 = null;
+
+  function getOrdersV74() {
+    return (
+      window.delyvoShopOrders ||
+      window.shopOrders ||
+      []
+    );
+  }
+
+  function getPendingCountV74() {
+    return getOrdersV74().filter(function (order) {
+      const status =
+        String(order.status || "")
+          .toLowerCase()
+          .trim();
+
+      return (
+        status === "pending" ||
+        status === "placed"
+      );
+    }).length;
+  }
+
+  function playNotificationSoundV74() {
+    try {
+      const AudioContext =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+      if (!AudioContext) return;
+
+      const context =
+        new AudioContext();
+
+      const oscillator =
+        context.createOscillator();
+
+      const gain =
+        context.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+
+      gain.gain.setValueAtTime(
+        0.0001,
+        context.currentTime
+      );
+
+      gain.gain.exponentialRampToValueAtTime(
+        0.15,
+        context.currentTime + 0.02
+      );
+
+      gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        context.currentTime + 0.35
+      );
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+
+      oscillator.start();
+
+      oscillator.stop(
+        context.currentTime + 0.35
+      );
+    } catch (e) {
+      console.warn(
+        "DELYVO V74 sound unavailable:",
+        e
+      );
+    }
+  }
+
+  function showNotificationV74(count) {
+    let box =
+      document.getElementById(
+        "delyvoShopNewOrderNotificationV74"
+      );
+
+    if (box) {
+      box.remove();
+    }
+
+    box =
+      document.createElement("div");
+
+    box.id =
+      "delyvoShopNewOrderNotificationV74";
+
+    box.innerHTML =
+      '<div class="delyvo-v74-title">' +
+      'New Grocery Order' +
+      '</div>' +
+      '<div class="delyvo-v74-count">' +
+      String(count) +
+      ' pending order' +
+      (count === 1 ? "" : "s") +
+      '</div>' +
+      '<button type="button" id="delyvoV74ViewOrders">' +
+      'View Orders' +
+      '</button>' +
+      '<button type="button" id="delyvoV74Close">' +
+      '×' +
+      '</button>';
+
+    document.body.appendChild(box);
+
+    const viewButton =
+      document.getElementById(
+        "delyvoV74ViewOrders"
+      );
+
+    if (viewButton) {
+      viewButton.addEventListener(
+        "click",
+        function () {
+          const section =
+            document.getElementById(
+              "ordersSection"
+            );
+
+          if (section) {
+            section.scrollIntoView({
+              behavior: "smooth",
+              block: "start"
+            });
+          }
+
+          box.remove();
+        }
+      );
+    }
+
+    const closeButton =
+      document.getElementById(
+        "delyvoV74Close"
+      );
+
+    if (closeButton) {
+      closeButton.addEventListener(
+        "click",
+        function () {
+          box.remove();
+        }
+      );
+    }
+
+    clearTimeout(
+      notificationTimerV74
+    );
+
+    notificationTimerV74 =
+      setTimeout(function () {
+        if (box.parentNode) {
+          box.remove();
+        }
+      }, 10000);
+
+    playNotificationSoundV74();
+  }
+
+  function checkNewOrderNotificationV74() {
+    const pending =
+      getPendingCountV74();
+
+    if (lastPendingCountV74 === null) {
+      lastPendingCountV74 = pending;
+      return;
+    }
+
+    if (pending > lastPendingCountV74) {
+      showNotificationV74(
+        pending
+      );
+    }
+
+    lastPendingCountV74 = pending;
+  }
+
+  window.delyvoCheckNewOrderNotificationV74 =
+    checkNewOrderNotificationV74;
+
+  window.delyvoShowNewOrderNotificationV74 =
+    showNotificationV74;
+
+  document.addEventListener(
+    "delyvoShopOrdersSynced",
+    function () {
+      setTimeout(
+        checkNewOrderNotificationV74,
+        100
+      );
+    }
+  );
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      setTimeout(function () {
+        lastPendingCountV74 =
+          getPendingCountV74();
+      }, 1500);
+    }
+  );
+
+  console.log(
+    "DELYVO SHOP NEW ORDER NOTIFICATION V74 ADDED"
+  );
+})();
+</script>
+
+<style id="delyvoShopNewOrderNotificationStyleV74">
+  #delyvoShopNewOrderNotificationV74 {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 99999;
+    width: min(360px, calc(100vw - 40px));
+    padding: 18px;
+    border-radius: 14px;
+    background: #111827;
+    color: #ffffff;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.22);
+  }
+
+  .delyvo-v74-title {
+    font-size: 17px;
+    font-weight: 800;
+  }
+
+  .delyvo-v74-count {
+    margin-top: 5px;
+    font-size: 14px;
+    opacity: 0.9;
+  }
+
+  #delyvoV74ViewOrders {
+    margin-top: 14px;
+    min-height: 40px;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #111827;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  #delyvoV74Close {
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    border: 0;
+    background: transparent;
+    color: #ffffff;
+    font-size: 22px;
+    cursor: pointer;
+  }
+
+  @media (max-width: 640px) {
+    #delyvoShopNewOrderNotificationV74 {
+      top: 12px;
+      right: 12px;
+      width: calc(100vw - 24px);
+    }
+  }
+</style>
+<!-- END DELYVO SHOP NEW ORDER NOTIFICATION V74 -->
+
+
+<!-- DELYVO SHOP CLEAN STATUS WORKFLOW -->
+<script>
+(function () {
+  "use strict";
+
+  const MARKER = "DELYVO SHOP CLEAN STATUS WORKFLOW";
+
+  const STATUS_FLOW = {
+    pending: {
+      next: "confirmed",
+      label: "Accept Order"
+    },
+    placed: {
+      next: "confirmed",
+      label: "Accept Order"
+    },
+    confirmed: {
+      next: "packing",
+      label: "Start Packing"
+    },
+    packing: {
+      next: "packed",
+      label: "Mark Ready"
+    },
+    packed: {
+      next: "out_for_delivery",
+      label: "Send for Delivery"
+    },
+    out_for_delivery: {
+      next: "delivered",
+      label: "Mark Delivered"
+    }
+  };
+
+  function normalizeStatus(status) {
+    return String(status || "").toLowerCase().trim();
+  }
+
+  function getOrder(orderId) {
+    const orders =
+      window.delyvoShopOrders ||
+      window.shopOrders ||
+      [];
+
+    return orders.find(function (order) {
+      return String(order.id) === String(orderId);
+    }) || null;
+  }
+
+  async function updateStatus(orderId, newStatus) {
+    if (!orderId || !newStatus) return;
+
+    if (typeof window.updateShopOrderStatus === "function") {
+      return await window.updateShopOrderStatus(orderId, newStatus);
+    }
+
+    if (typeof window.delyvoUpdateOrderStatusV67 === "function") {
+      return await window.delyvoUpdateOrderStatusV67(orderId, newStatus);
+    }
+
+    throw new Error("Shop order status function not available.");
+  }
+
+  function createButton(order) {
+    if (!order || !order.id) return null;
+
+    const status = normalizeStatus(order.status);
+    const flow = STATUS_FLOW[status];
+
+    if (!flow) return null;
+
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className = "delyvo-clean-status-btn";
+    button.dataset.orderId = order.id;
+    button.dataset.nextStatus = flow.next;
+    button.textContent = flow.label;
+
+    return button;
+  }
+
+  function findOrderCard(orderId) {
+    const selectors = [
+      '.shop-order[data-order-id="' + orderId + '"]',
+      '.shop-order-card[data-order-id="' + orderId + '"]',
+      '.final-shop-order[data-order-id="' + orderId + '"]',
+      '[data-order-id="' + orderId + '"]'
+    ];
+
+    for (const selector of selectors) {
+      const el = document.querySelector(selector);
+      if (el) return el;
+    }
+
+    return null;
+  }
+
+  function connectOrderCard(card) {
+    if (!card) return;
+
+    const orderId = card.dataset.orderId;
+    if (!orderId) return;
+
+    const order = getOrder(orderId);
+    if (!order) return;
+
+    const oldButton = card.querySelector(".delyvo-clean-status-btn");
+    if (oldButton) oldButton.remove();
+
+    const button = createButton(order);
+    if (!button) return;
+
+    const wrapper =
+      card.querySelector(".shop-order-actions") ||
+      card.querySelector(".order-actions") ||
+      card.querySelector(".shop-actions") ||
+      card;
+
+    wrapper.appendChild(button);
+  }
+
+  function connectAll() {
+    const cards = document.querySelectorAll(
+      ".shop-order, .shop-order-card, .final-shop-order"
+    );
+
+    cards.forEach(connectOrderCard);
+  }
+
+  document.addEventListener("click", async function (event) {
+    const button = event.target.closest(".delyvo-clean-status-btn");
+    if (!button) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (button.disabled) return;
+
+    const orderId = button.dataset.orderId;
+    const nextStatus = button.dataset.nextStatus;
+
+    if (!orderId || !nextStatus) return;
+
+    const order = getOrder(orderId);
+
+    if (!order) {
+      alert("Order data not found. Please refresh orders.");
+      return;
+    }
+
+    const flow = STATUS_FLOW[normalizeStatus(order.status)];
+
+    if (!flow || flow.next !== nextStatus) {
+      alert("Order status changed. Please refresh orders.");
+      return;
+    }
+
+    button.disabled = true;
+    const oldText = button.textContent;
+    button.textContent = "Updating...";
+
+    try {
+      await updateStatus(orderId, nextStatus);
+
+      document.dispatchEvent(
+        new CustomEvent("delyvoCleanShopStatusChanged", {
+          detail: {
+            orderId: orderId,
+            newStatus: nextStatus
+          }
+        })
+      );
+
+    } catch (error) {
+      console.error("DELYVO SHOP STATUS ERROR:", error);
+      alert(error.message || "Unable to update order status.");
+      button.disabled = false;
+      button.textContent = oldText;
+    }
+  });
+
+  window.delyvoConnectCleanShopStatusWorkflow = connectAll;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      setTimeout(connectAll, 1800);
+    });
+  } else {
+    setTimeout(connectAll, 1800);
+  }
+
+  const observer = new MutationObserver(function () {
+    connectAll();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  const style = document.createElement("style");
+  style.id = "delyvoCleanShopStatusWorkflowStyles";
+  style.textContent = `
+    .delyvo-clean-status-btn {
+      width: 100%;
+      min-height: 44px;
+      margin-top: 10px;
+      padding: 11px 14px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 14px;
+      background: #111827;
+      color: #fff;
+      transition: opacity .2s, transform .15s;
+    }
+
+    .delyvo-clean-status-btn:hover {
+      opacity: .92;
+      transform: translateY(-1px);
+    }
+
+    .delyvo-clean-status-btn:disabled {
+      opacity: .6;
+      cursor: wait;
+      transform: none;
+    }
+
+    @media (max-width: 600px) {
+      .delyvo-clean-status-btn {
+        min-height: 46px;
+        font-size: 15px;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+
+})();
+</script>
+<!-- END DELYVO SHOP CLEAN STATUS WORKFLOW -->
+
+
+<!-- DELYVO SHOP FINAL DEVELOPMENT CONSOLIDATION -->
+<script>
+(function () {
+  "use strict";
+
+  const SUPABASE_URL =
+    "https://unwdkreujyejgcucgttj.supabase.co";
+
+  const SUPABASE_KEY =
+    "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+  const STORE_ID =
+    "7ef989c8-9826-437b-8a63-bb0dfa817540";
+
+  let lastPendingCount = null;
+  let notificationOpen = false;
+
+  function token() {
+    return (
+      localStorage.getItem("delyvo_shop_token") ||
+      localStorage.getItem("delyvo_access_token") ||
+      ""
+    );
+  }
+
+  function orders() {
+    return (
+      window.delyvoShopOrders ||
+      window.shopOrders ||
+      []
+    );
+  }
+
+  function pendingOrders() {
+    return orders().filter(function (order) {
+      const status =
+        String(order.status || "").toLowerCase();
+
+      return status === "pending" ||
+             status === "placed";
+    });
+  }
+
+  function emit(name, detail) {
+    document.dispatchEvent(
+      new CustomEvent(name, { detail: detail || {} })
+    );
+  }
+
+  /* ---------------- SINGLE ORDER NOTIFICATION ---------------- */
+
+  function closeNotification() {
+    const box =
+      document.getElementById(
+        "delyvoFinalShopNotification"
+      );
+
+    if (box) box.remove();
+
+    notificationOpen = false;
+  }
+
+  function showNotification(count) {
+    closeNotification();
+
+    const box = document.createElement("div");
+
+    box.id = "delyvoFinalShopNotification";
+
+    box.innerHTML = `
+      <div class="dfsn-title">
+        New Grocery Order
+      </div>
+
+      <div class="dfsn-count">
+        ${count} pending order${count === 1 ? "" : "s"}
+      </div>
+
+      <div class="dfsn-actions">
+        <button type="button"
+          class="dfsn-view">
+          View Orders
+        </button>
+
+        <button type="button"
+          class="dfsn-close">
+          Close
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(box);
+
+    notificationOpen = true;
+
+    const view =
+      box.querySelector(".dfsn-view");
+
+    if (view) {
+      view.addEventListener("click", function () {
+        closeNotification();
+
+        if (typeof window.delyvoOpenShopSection === "function") {
+          window.delyvoOpenShopSection("ordersSection");
+        } else {
+          const section =
+            document.getElementById("ordersSection");
+
+          if (section) {
+            section.scrollIntoView({
+              behavior: "smooth",
+              block: "start"
+            });
+          }
+        }
+      });
+    }
+
+    const close =
+      box.querySelector(".dfsn-close");
+
+    if (close) {
+      close.addEventListener(
+        "click",
+        closeNotification
+      );
+    }
+
+    setTimeout(function () {
+      if (notificationOpen) {
+        closeNotification();
+      }
+    }, 10000);
+  }
+
+  function checkNewOrders() {
+    const count = pendingOrders().length;
+
+    if (lastPendingCount === null) {
+      lastPendingCount = count;
+      return;
+    }
+
+    if (count > lastPendingCount) {
+      showNotification(count);
+
+      emit("delyvoFinalShopNewOrder", {
+        pendingCount: count
+      });
+    }
+
+    lastPendingCount = count;
+
+    updatePendingBadge(count);
+  }
+
+  /* ---------------- PENDING BADGE ---------------- */
+
+  function updatePendingBadge(count) {
+    const section =
+      document.getElementById("ordersSection");
+
+    if (!section) return;
+
+    let badge =
+      document.getElementById(
+        "delyvoFinalPendingBadge"
+      );
+
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "delyvoFinalPendingBadge";
+
+      const heading =
+        section.querySelector("h1,h2,h3,h4");
+
+      if (heading) {
+        heading.appendChild(badge);
+      } else {
+        section.insertBefore(
+          badge,
+          section.firstChild
+        );
+      }
+    }
+
+    badge.textContent =
+      count > 0 ? " " + count + " Pending" : "";
+
+    badge.style.display =
+      count > 0 ? "inline-flex" : "none";
+  }
+
+  /* ---------------- DASHBOARD FINAL SYNC ---------------- */
+
+  async function syncDashboard() {
+    try {
+      if (
+        typeof window.loadFinalShopDashboard ===
+        "function"
+      ) {
+        await window.loadFinalShopDashboard();
+      }
+
+      if (
+        typeof window.delyvoRefreshDashboardSummary ===
+        "function"
+      ) {
+        await window.delyvoRefreshDashboardSummary();
+      }
+    } catch (error) {
+      console.error(
+        "DELYVO FINAL SHOP DASHBOARD SYNC:",
+        error
+      );
+    }
+  }
+
+  /* ---------------- ORDERS FINAL SYNC ---------------- */
+
+  async function syncOrders() {
+    try {
+      if (
+        typeof window.loadShopOrders ===
+        "function"
+      ) {
+        const result =
+          await window.loadShopOrders();
+
+        if (Array.isArray(result)) {
+          window.delyvoShopOrders = result;
+          window.shopOrders = result;
+        }
+      } else if (
+        typeof window.loadShop ===
+        "function"
+      ) {
+        await window.loadShop();
+      }
+
+      checkNewOrders();
+      updatePendingBadge(
+        pendingOrders().length
+      );
+
+      emit("delyvoFinalShopOrdersSynced", {
+        count: orders().length,
+        pendingCount: pendingOrders().length
+      });
+
+    } catch (error) {
+      console.error(
+        "DELYVO FINAL SHOP ORDER SYNC:",
+        error
+      );
+    }
+  }
+
+  /* ---------------- PRODUCTS FINAL SYNC ---------------- */
+
+  async function syncProducts() {
+    try {
+      if (
+        typeof window.loadFinalShopProducts ===
+        "function"
+      ) {
+        await window.loadFinalShopProducts();
+      }
+
+      if (
+        typeof window.applyDelyvoProductManagementFilter ===
+        "function"
+      ) {
+        window.applyDelyvoProductManagementFilter();
+      }
+
+    } catch (error) {
+      console.error(
+        "DELYVO FINAL SHOP PRODUCT SYNC:",
+        error
+      );
+    }
+  }
+
+  /* ---------------- FULL SHOP SYNC ---------------- */
+
+  async function fullSync() {
+    await syncOrders();
+    await syncProducts();
+    await syncDashboard();
+  }
+
+  window.delyvoFinalShopFullSync =
+    fullSync;
+
+  window.delyvoFinalShopCloseNotification =
+    closeNotification;
+
+  /* ---------------- ONE FINAL STATUS CONNECTION ---------------- */
+
+  document.addEventListener(
+    "delyvoCleanShopStatusChanged",
+    async function (event) {
+      const detail =
+        event.detail || {};
+
+      emit(
+        "delyvoShopOrderStatusChanged",
+        detail
+      );
+
+      await fullSync();
+
+      if (
+        detail.orderId &&
+        typeof window.openShopOrderDetails ===
+        "function"
+      ) {
+        try {
+          window.openShopOrderDetails(
+            detail.orderId
+          );
+        } catch (_) {}
+      }
+    }
+  );
+
+  document.addEventListener(
+    "delyvoShopOrdersSynced",
+    function () {
+      checkNewOrders();
+      updatePendingBadge(
+        pendingOrders().length
+      );
+    }
+  );
+
+  /* ---------------- RESPONSIVE SHOP UI ---------------- */
+
+  const style = document.createElement("style");
+
+  style.id =
+    "delyvoShopFinalDevelopmentStyles";
+
+  style.textContent = `
+    #delyvoFinalShopNotification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 999999;
+      width: min(360px, calc(100vw - 30px));
+      padding: 18px;
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 12px 40px rgba(0,0,0,.18);
+      border: 1px solid #e5e7eb;
+    }
+
+    .dfsn-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .dfsn-count {
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+
+    .dfsn-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dfsn-actions button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 9px;
+      padding: 9px 13px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .dfsn-view {
+      flex: 1;
+    }
+
+    .dfsn-close {
+      background: #f3f4f6;
+    }
+
+    #delyvoFinalPendingBadge {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #fee2e2;
+    }
+
+    .delyvo-clean-status-btn {
+      min-height: 44px;
+      touch-action: manipulation;
+    }
+
+    @media (max-width: 700px) {
+      body {
+        overflow-x: hidden !important;
+      }
+
+      #delyvoFinalShopNotification {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        width: auto;
+      }
+
+      .dfsn-actions {
+        flex-direction: column;
+      }
+
+      .dfsn-actions button {
+        width: 100%;
+      }
+
+      button {
+        min-height: 42px;
+      }
+
+      input,
+      select {
+        min-height: 42px;
+        max-width: 100%;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  /* ---------------- INITIAL + PERIODIC SYNC ---------------- */
+
+  function start() {
+    setTimeout(function () {
+      fullSync();
+    }, 2500);
+
+    setInterval(function () {
+      if (document.visibilityState === "visible") {
+        syncOrders();
+      }
+    }, 30000);
+
+    setInterval(function () {
+      if (document.visibilityState === "visible") {
+        syncDashboard();
+      }
+    }, 30000);
+
+    setInterval(function () {
+      if (document.visibilityState === "visible") {
+        checkNewOrders();
+      }
+    }, 5000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      start
+    );
+  } else {
+    start();
+  }
+
+})();
+</script>
+<!-- END DELYVO SHOP FINAL DEVELOPMENT CONSOLIDATION -->
+
+</body>
+</html>

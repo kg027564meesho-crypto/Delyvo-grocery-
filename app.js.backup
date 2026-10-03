@@ -1,0 +1,395 @@
+const SUPABASE_URL = "https://unwdkreujyejgcucgttj.supabase.co";
+const SUPABASE_KEY = "sb_publishable_QylVZHuaIj98axBkNuvbFA_Z6NX-9Q6";
+
+const cart = JSON.parse(localStorage.getItem("delyvo_grocery_cart") || "[]");
+let selectedAddress = JSON.parse(localStorage.getItem("delyvo_grocery_address") || "null");
+
+const categoryIcons = [
+  "🥦", "🥛", "🍎", "🍞", "🍚",
+  "🥤", "🧴", "🍪", "🧹", "📦"
+];
+
+async function supabaseGet(table) {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/${table}?select=*`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`${table}: HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function renderCategories(categories) {
+  const box = document.getElementById("categories");
+
+  if (!categories.length) {
+    box.innerHTML = "<p>No categories available.</p>";
+    return;
+  }
+
+  box.innerHTML = categories.map((category, index) => `
+    <div class="category">
+      <div class="icon">${categoryIcons[index] || "🛒"}</div>
+      <h3>${category.name}</h3>
+    </div>
+  `).join("");
+}
+
+function renderProducts(products) {
+  const box = document.getElementById("products");
+
+  if (!products.length) {
+    box.innerHTML = "<p>No products available.</p>";
+    return;
+  }
+
+  box.innerHTML = products.map(product => `
+    <div class="product">
+      <div class="product-image">
+        ${product.image_url
+          ? `<img src="${product.image_url}" alt="${product.name}">`
+          : "🛒"}
+      </div>
+      <h3>${product.name}</h3>
+      <div class="unit">${product.unit ?? ""}</div>
+      <div class="price">
+        ₹${product.selling_price ?? "--"}
+        ${product.mrp && product.mrp > product.selling_price
+          ? `<span class="mrp">₹${product.mrp}</span>`
+          : ""}
+      </div>
+      <button class="add-btn" onclick="addToCart('${product.id}')">
+        Add
+      </button>
+    </div>
+  `).join("");
+}
+
+function addToCart(productId) {
+  const product = window.allProducts.find(p => p.id === productId);
+  if (!product) return;
+
+  const existing = cart.find(item => item.id === productId);
+
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    cart.push({
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      price: Number(product.selling_price || 0),
+      image_url: product.image_url,
+      quantity: 1
+    });
+  }
+
+  saveCart();
+}
+
+function saveCart() {
+  localStorage.setItem("delyvo_grocery_cart", JSON.stringify(cart));
+
+  document.getElementById("cartCount").textContent =
+    cart.reduce((total, item) => total + item.quantity, 0);
+
+  renderCart();
+}
+
+function renderCart() {
+  const box = document.getElementById("cartItems");
+
+  if (!box) return;
+
+  if (!cart.length) {
+    box.innerHTML = "<p>Your cart is empty.</p>";
+    document.getElementById("cartSubtotal").textContent = "₹0";
+    document.getElementById("cartTotal").textContent = "₹0";
+    return;
+  }
+
+  box.innerHTML = cart.map(item => `
+    <div class="cart-row">
+      <div class="cart-row-info">
+        <strong>${item.name}</strong>
+        <small>${item.unit || ""}</small>
+
+        <div class="qty">
+          <button onclick="changeQty('${item.id}', -1)">−</button>
+          <span>${item.quantity}</span>
+          <button onclick="changeQty('${item.id}', 1)">+</button>
+          <b>₹${item.price * item.quantity}</b>
+        </div>
+      </div>
+    </div>
+  `).join("");
+
+  const subtotal = cart.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  document.getElementById("cartSubtotal").textContent = `₹${subtotal}`;
+  document.getElementById("cartTotal").textContent = `₹${subtotal}`;
+}
+
+function changeQty(productId, amount) {
+  const item = cart.find(x => x.id === productId);
+
+  if (!item) return;
+
+  item.quantity += amount;
+
+  if (item.quantity <= 0) {
+    cart.splice(cart.indexOf(item), 1);
+  }
+
+  saveCart();
+}
+
+function openCart() {
+  renderCart();
+  document.getElementById("cartPanel").classList.add("open");
+}
+
+function closePanel(id) {
+  document.getElementById(id).classList.remove("open");
+}
+
+function openCheckout() {
+  if (!cart.length) return;
+
+  closePanel("cartPanel");
+
+  const subtotal = cart.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  const box = document.getElementById("checkoutSummary");
+
+  box.innerHTML = `
+    ${cart.map(item => `
+      <div class="checkout-line">
+        <span>${item.name} × ${item.quantity}</span>
+        <b>₹${item.price * item.quantity}</b>
+      </div>
+    `).join("")}
+
+    <hr>
+
+    <div class="checkout-line">
+      <strong>Total</strong>
+      <strong>₹${subtotal}</strong>
+    </div>
+
+    <br>
+
+    ${
+      selectedAddress
+      ? `<strong>Deliver to</strong>
+         <p>
+         ${selectedAddress.recipient_name}<br>
+         ${selectedAddress.address_line1}<br>
+         ${selectedAddress.city} - ${selectedAddress.pincode}
+         </p>`
+      : `<strong>⚠️ Delivery address not added</strong>`
+    }
+  `;
+
+  document.getElementById("checkoutModal").classList.add("open");
+}
+
+function placeOrder() {
+  if (!selectedAddress) {
+    closePanel("checkoutModal");
+    document.getElementById("locationModal").classList.add("open");
+    return;
+  }
+
+  alert(
+    "Checkout screen is ready. Next backend step will connect this button to the Supabase orders table."
+  );
+}
+
+async function loadHome() {
+  try {
+    const [categories, products] = await Promise.all([
+      supabaseGet("categories"),
+      supabaseGet("products")
+    ]);
+
+    window.allProducts = products;
+    renderCategories(categories);
+    renderProducts(products);
+
+  } catch (error) {
+    console.error(error);
+
+    document.getElementById("categories").innerHTML =
+      "<p>Unable to load categories.</p>";
+
+    document.getElementById("products").innerHTML =
+      "<p>Unable to load products.</p>";
+  }
+}
+
+loadHome();
+
+document.getElementById("searchInput").addEventListener("input", function () {
+  const query = this.value.trim().toLowerCase();
+
+  const filtered = window.allProducts.filter(product =>
+    (product.name || "").toLowerCase().includes(query) ||
+    (product.short_description || "").toLowerCase().includes(query) ||
+    (product.sku || "").toLowerCase().includes(query)
+  );
+
+  renderProducts(filtered);
+});
+
+
+document.getElementById("cartBtn").onclick = openCart;
+
+document.getElementById("locationBtn").onclick = () => {
+  document.getElementById("locationModal").classList.add("open");
+};
+
+document.getElementById("addressForm").onsubmit = function(event) {
+  event.preventDefault();
+
+  selectedAddress = Object.fromEntries(new FormData(this));
+
+  localStorage.setItem(
+    "delyvo_grocery_address",
+    JSON.stringify(selectedAddress)
+  );
+
+  document.getElementById("locationText").textContent =
+    `${selectedAddress.label} · ${selectedAddress.city}`;
+
+  closePanel("locationModal");
+};
+
+saveCart();
+
+
+async function authLogin(email, password) {
+  const response = await fetch(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY
+      },
+      body: JSON.stringify({
+        email,
+        password
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.msg || data.message || data.error_description || "Login failed");
+  }
+
+  localStorage.setItem("delyvo_access_token", data.access_token);
+  localStorage.setItem("delyvo_refresh_token", data.refresh_token);
+
+  return data;
+}
+
+async function authSignup(email, password) {
+  const response = await fetch(
+    `${SUPABASE_URL}/auth/v1/signup`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY
+      },
+      body: JSON.stringify({
+        email,
+        password
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.msg || data.message || data.error_description || "Signup failed");
+  }
+
+  return data;
+}
+
+document.getElementById("authForm").onsubmit = async function(event) {
+  event.preventDefault();
+
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+
+  const message = document.getElementById("authMessage");
+  message.textContent = "Login ho raha hai...";
+
+  try {
+    await authLogin(email, password);
+
+    message.textContent = "Login successful ✅";
+
+    setTimeout(() => {
+      closePanel("authModal");
+    }, 500);
+
+  } catch (error) {
+    message.textContent = error.message;
+  }
+};
+
+document.getElementById("signupBtn").onclick = async function() {
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+
+  const message = document.getElementById("authMessage");
+
+  if (!email || !password) {
+    message.textContent = "Email aur password bharo.";
+    return;
+  }
+
+  if (password.length < 6) {
+    message.textContent = "Password kam se kam 6 characters ka hona chahiye.";
+    return;
+  }
+
+  message.textContent = "Account ban raha hai...";
+
+  try {
+    const data = await authSignup(email, password);
+
+    if (data.access_token) {
+      localStorage.setItem("delyvo_access_token", data.access_token);
+      localStorage.setItem("delyvo_refresh_token", data.refresh_token);
+      message.textContent = "Account ban gaya ✅";
+    } else {
+      message.textContent =
+        "Account ban gaya. Agar email confirmation on hai to email verify karo.";
+    }
+
+  } catch (error) {
+    message.textContent = error.message;
+  }
+};
+

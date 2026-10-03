@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delyvo Grocery</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div>
+      <h1>DELYVO</h1>
+      <p>Fresh groceries, delivered.</p>
+    </div>
+
+    <button id="cartBtn">
+      🛒 <span id="cartCount">0</span>
+    </button>
+  </header>
+
+  
+<div id="authModal" class="modal">
+  <div class="modal-card">
+    <div class="drawer-head">
+      <h2 id="authTitle">Delyvo Login</h2>
+      <button class="close-btn" onclick="closePanel('authModal')">×</button>
+    </div>
+
+    <form id="authForm">
+      <input id="authEmail" type="email" placeholder="Email" required>
+      <input id="authPassword" type="password" placeholder="Password" required>
+      <button class="primary-btn" type="submit">Login</button>
+    </form>
+
+    <p id="authMessage"></p>
+
+    <button id="signupBtn" class="secondary-btn" type="button">
+      New customer? Create account
+    </button>
+  </div>
+</div>
+
+<main>
+    <section class="location">
+      <span>📍</span>
+      <div>
+        <small>Deliver to</small>
+        <strong>Select your location</strong>
+      </div>
+    </section>
+
+    <section class="search">
+      <input
+        id="searchInput"
+        type="search"
+        placeholder="Search groceries..."
+      >
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Categories</h2>
+      </div>
+
+      <div id="categories" class="categories">
+        <p>Loading categories...</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Popular products</h2>
+      </div>
+
+      <div id="products" class="products">
+        <p>Loading products...</p>
+      </div>
+    </section>
+  </main>
+
+  
+<div id="cartPanel" class="drawer">
+  <div class="drawer-head">
+    <h2>Your Cart</h2>
+    <button class="close-btn" onclick="closePanel('cartPanel')">×</button>
+  </div>
+  <div id="cartItems" class="cart-items"></div>
+  <div class="cart-footer">
+    <div><span>Subtotal</span><b id="cartSubtotal">₹0</b></div>
+    <div><span>Delivery</span><b>FREE</b></div>
+    <div class="cart-total"><span>Total</span><b id="cartTotal">₹0</b></div>
+    <button class="primary-btn" onclick="openCheckout()">Proceed to Checkout</button>
+  </div>
+</div>
+
+<div id="locationModal" class="modal">
+  <div class="modal-card">
+    <div class="drawer-head">
+      <h2>Delivery Address</h2>
+      <button class="close-btn" onclick="closePanel('locationModal')">×</button>
+    </div>
+
+    <form id="addressForm">
+      <input name="label" placeholder="Home / Work" required>
+      <input name="recipient_name" placeholder="Your name" required>
+      <input name="phone" placeholder="Phone number" required>
+      <textarea name="address_line1" placeholder="House / street / area" required></textarea>
+      <input name="city" placeholder="City" required>
+      <input name="pincode" placeholder="Pincode" required>
+      <button class="primary-btn" type="submit">Save Address</button>
+    </form>
+  </div>
+</div>
+
+<div id="checkoutModal" class="modal">
+  <div class="modal-card">
+    <div class="drawer-head">
+      <h2>Checkout</h2>
+      <button class="close-btn" onclick="closePanel('checkoutModal')">×</button>
+    </div>
+
+    <div id="checkoutSummary" class="checkout-summary"></div>
+
+    <div class="payment-box">
+      <b>Payment Method</b>
+      <p>Cash on Delivery</p>
+    </div>
+
+    <button class="primary-btn" onclick="placeOrder()">Place Order</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
